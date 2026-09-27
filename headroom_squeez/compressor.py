@@ -8,8 +8,9 @@ a task-conditioned line pruner:
 
   1. **Gate** — pass through (``compressed=False``) without touching the model
      when there is no query (no task, no basis for relevance), when the block is
-     too short for markers to pay off, or when the backend is known to be
-     unavailable.
+     too short for markers to pay off, when it is too long for the model to
+     score within the latency budget (Headroom's own compressors handle it
+     instead), or when the backend is known to be unavailable.
   2. **Score** — ask the span backend which characters matter for the query.
   3. **Protect** — keep failure lines, tracebacks, neighbours and edges no
      matter what the model said (:mod:`headroom_squeez.selection`).
@@ -65,12 +66,16 @@ class SqueezSettings:
         context_lines: Neighbours kept on each side of every kept line.
         edge_lines: Lines always kept at the start and at the end.
         min_savings: Minimum fraction of tokens saved; below it we pass through.
+        max_tokens: Blocks larger than this (query included, Headroom's token
+            estimate) pass through without running the model. ``None`` uses the
+            backend's ``max_input_tokens`` when it has one, else no limit.
     """
 
     min_lines: int = 40
     context_lines: int = 2
     edge_lines: int = 2
     min_savings: float = 0.2
+    max_tokens: int | None = None
 
 
 class SqueezCompressor:
@@ -130,6 +135,12 @@ class SqueezCompressor:
         lines = split_lines(content)
         if len(lines) < settings.min_lines:
             return self._passthrough(content, "too short")
+        tokens_before = _TOKENS.count_text(content)
+        budget = self._token_budget()
+        if budget is not None and tokens_before + _TOKENS.count_text(query) > budget:
+            # Scoring this would stall the agent; Headroom's own path is the
+            # better trade for blocks this large.
+            return self._passthrough(content, "over token budget", tokens_before)
 
         try:
             spans = self._backend.find_spans(query, content)
@@ -154,7 +165,6 @@ class SqueezCompressor:
         )
         plan = render(lines, keep)
 
-        tokens_before = _TOKENS.count_text(content)
         tokens_after = _TOKENS.count_text(plan.content)
         if not plan.recoverable or tokens_after > tokens_before * (1 - settings.min_savings):
             return self._passthrough(content, "savings below threshold", tokens_before)
@@ -169,6 +179,12 @@ class SqueezCompressor:
             warnings=[],
             compressed=True,
         )
+
+    def _token_budget(self) -> int | None:
+        if self._settings.max_tokens is not None:
+            return self._settings.max_tokens
+        budget = getattr(self._backend, "max_input_tokens", None)
+        return budget if isinstance(budget, int) else None
 
     @staticmethod
     def _passthrough(content: str, reason: str, tokens: int | None = None) -> CompressOutput:

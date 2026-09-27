@@ -39,7 +39,24 @@ Runs locally on CPU. No API key, GPU or cloud account.
 - The first and last two lines.
 
 It passes through unchanged when there is no task query, the output is under
-40 lines, the model found nothing, or the saving is under 20%. It never raises.
+40 lines, the output is larger than the model can score in time on this machine
+(`HEADROOM_SQUEEZ_MAX_TOKENS`), the model found nothing, or the saving is under
+20%.
+
+## Speed
+
+The model has to see the whole output at once: cutting it into smaller windows
+made it 20x faster but halved recall. So instead of shrinking the window, the
+plugin only scores outputs it can finish quickly and leaves larger ones to
+Headroom. Measured forward time (float32):
+
+| Tokens | GTX 1650 Ti | 4-core laptop CPU |
+|---|---|---|
+| 512 | 70 ms | 660 ms |
+| 2048 | 490 ms | 3.7 s |
+| 8192 | 4.2 s | 31 s |
+
+A GPU is strongly recommended; on CPU the plugin only handles short outputs. It never raises.
 If the model can't load, it logs one warning and Headroom's own path takes over.
 
 ## Configuration
@@ -50,6 +67,7 @@ If the model can't load, it logs one warning and Headroom's own path takes over.
 | `HEADROOM_SQUEEZ_REVISION` | pinned commit of the default model |
 | `HEADROOM_SQUEEZ_DEVICE` | `auto` (CUDA if available, else CPU) |
 | `HEADROOM_SQUEEZ_DTYPE` | `float32` |
+| `HEADROOM_SQUEEZ_MAX_TOKENS` | 2048 on GPU, 512 on CPU |
 
 ## Known limitations
 

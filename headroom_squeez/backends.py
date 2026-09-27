@@ -25,7 +25,22 @@ Three rules shape it:
 
 Long outputs need no chunking here: ``process()`` tokenizes with overflowing
 windows (``max_length`` tokens, ``doc_stride`` overlap) and maps every window
-back to character offsets in the original ``content``.
+back to character offsets in the original ``content``. Shrinking the window to
+go faster is not an option: on the Squeez test split, gold-line recall at 90%
+compression falls from 0.78 (8192) to 0.47 (2048) and 0.31 (512), because the
+model needs the whole output in view.
+
+What bounds latency instead is :attr:`HighlighterBackend.max_input_tokens`:
+the largest input this backend can score within the latency budget on its
+device. Measured forward times (fp32, ModernBERT-base):
+
+    tokens      GTX 1650 Ti     4-core laptop CPU
+    512         70 ms           660 ms
+    2048        490 ms          3.7 s
+    8192        4.2 s           31 s
+
+so the defaults are :data:`CUDA_TOKEN_BUDGET` and :data:`CPU_TOKEN_BUDGET`.
+The compressor passes anything larger straight to Headroom's own path.
 """
 
 from __future__ import annotations
@@ -38,6 +53,8 @@ from typing import Any, Protocol, runtime_checkable
 log = logging.getLogger(__name__)
 
 __all__ = [
+    "CPU_TOKEN_BUDGET",
+    "CUDA_TOKEN_BUDGET",
     "DEFAULT_MODEL",
     "DEFAULT_REVISION",
     "BackendUnavailableError",
@@ -53,6 +70,12 @@ _ENV_MODEL = "HEADROOM_SQUEEZ_MODEL"
 _ENV_REVISION = "HEADROOM_SQUEEZ_REVISION"
 _ENV_DEVICE = "HEADROOM_SQUEEZ_DEVICE"
 _ENV_DTYPE = "HEADROOM_SQUEEZ_DTYPE"
+_ENV_MAX_TOKENS = "HEADROOM_SQUEEZ_MAX_TOKENS"
+
+#: Largest input scored on a GPU (~0.5 s on a GTX 1650 Ti).
+CUDA_TOKEN_BUDGET = 2048
+#: Largest input scored on CPU (~0.7 s on a 4-core laptop).
+CPU_TOKEN_BUDGET = 512
 
 
 class BackendUnavailableError(RuntimeError):
@@ -92,6 +115,9 @@ class HighlighterBackend:
         merge_gap_chars: Spans closer than this are merged by the model.
         max_length: Token window per forward pass.
         doc_stride: Token overlap between consecutive windows.
+        max_input_tokens: Largest input to score. Defaults to
+            ``$HEADROOM_SQUEEZ_MAX_TOKENS``, else :data:`CUDA_TOKEN_BUDGET` or
+            :data:`CPU_TOKEN_BUDGET` for the resolved device.
     """
 
     def __init__(
@@ -106,6 +132,7 @@ class HighlighterBackend:
         merge_gap_chars: int = 20,
         max_length: int = 8192,
         doc_stride: int = 256,
+        max_input_tokens: int | None = None,
     ) -> None:
         self.model_id = model_id or os.environ.get(_ENV_MODEL) or DEFAULT_MODEL
         env_revision = os.environ.get(_ENV_REVISION)
@@ -122,6 +149,7 @@ class HighlighterBackend:
         self.merge_gap_chars = merge_gap_chars
         self.max_length = max_length
         self.doc_stride = doc_stride
+        self._max_input_tokens = max_input_tokens
         self._model: Any = None
         self._lock = threading.Lock()
 
@@ -135,6 +163,19 @@ class HighlighterBackend:
             return "cuda" if torch.cuda.is_available() else "cpu"
         except Exception:  # noqa: BLE001 - no torch means the load will fail anyway
             return "cpu"
+
+    @property
+    def max_input_tokens(self) -> int:
+        """Largest input (in tokens) this backend scores within its latency budget."""
+        if self._max_input_tokens is not None:
+            return self._max_input_tokens
+        env = os.environ.get(_ENV_MAX_TOKENS)
+        if env:
+            try:
+                return int(env)
+            except ValueError:
+                log.warning("ignoring non-integer %s=%r", _ENV_MAX_TOKENS, env)
+        return CUDA_TOKEN_BUDGET if self.resolved_device().startswith("cuda") else CPU_TOKEN_BUDGET
 
     def _load(self) -> Any:
         """Load (once) and return the model; raise ``BackendUnavailableError`` on failure."""

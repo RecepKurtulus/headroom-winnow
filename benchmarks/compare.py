@@ -53,7 +53,7 @@ from headroom.transforms.compressor_registry import CompressInput
 from headroom.transforms.relevance_split import plan_relevance_split
 
 from headroom_squeez.backends import HighlighterBackend
-from headroom_squeez.compressor import SqueezCompressor
+from headroom_squeez.compressor import SqueezCompressor, SqueezSettings
 from headroom_squeez.selection import mandatory_lines, split_lines
 
 DATASET = "KRLabsOrg/tool-output-extraction-swebench"
@@ -245,8 +245,10 @@ class _FixedSpans:
 
     def __init__(self, spans: list[tuple[int, int]]) -> None:
         self.spans = spans
+        self.called = False
 
     def find_spans(self, query: str, content: str) -> list[tuple[int, int]]:
+        self.called = True
         return self.spans
 
 
@@ -348,18 +350,25 @@ def run(samples: list[Sample], methods: set[str], backend: HighlighterBackend) -
                 kept = lines_touched(spans, lines)
                 col.add("squeez-raw", score_result(s, lines, Result(kept, keep_text(kept), fwd)))
             if "headroom-squeez" in methods:
-                comp = SqueezCompressor(_FixedSpans(spans))
-                out, sel = _timed(
-                    comp.compress, CompressInput(s.tool_output, "text/plain", s.query)
-                )
-                kept = (
-                    _kept_from_output(out.content, len(lines))
-                    if out.compressed
-                    else set(range(len(lines)))
-                )
-                col.add(
-                    "headroom-squeez", score_result(s, lines, Result(kept, out.content, fwd + sel))
-                )
+                # As shipped (token budget for this device), and unbounded to
+                # show what the budget costs in recall and compression.
+                for name, budget in (
+                    ("headroom-squeez", backend.max_input_tokens),
+                    ("headroom-squeez-unbounded", 10**9),
+                ):
+                    fixed = _FixedSpans(spans)
+                    comp = SqueezCompressor(fixed, SqueezSettings(max_tokens=budget))
+                    out, sel = _timed(
+                        comp.compress, CompressInput(s.tool_output, "text/plain", s.query)
+                    )
+                    kept = (
+                        _kept_from_output(out.content, len(lines))
+                        if out.compressed
+                        else set(range(len(lines)))
+                    )
+                    # The model only costs time when the compressor consulted it.
+                    latency = sel + (fwd if fixed.called else 0.0)
+                    col.add(name, score_result(s, lines, Result(kept, out.content, latency)))
             for r in RATIOS:
                 kept = top_k(sq_scores, r)
                 col.add(

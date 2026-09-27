@@ -121,3 +121,29 @@ def test_never_raises_on_bad_backend_output(sample_log: str) -> None:
 def test_settings_are_respected(sample_log: str) -> None:
     comp = SqueezCompressor(FakeBackend(("test_login_redirect",)), SqueezSettings(min_lines=10_000))
     assert comp.compress(_inp(sample_log)).compressed is False
+
+
+def test_over_budget_passes_through_without_calling_the_model(sample_log: str) -> None:
+    backend = FakeBackend(("test_login_redirect",))
+    comp = SqueezCompressor(backend, SqueezSettings(max_tokens=50))
+    out = comp.compress(_inp(sample_log))
+    assert out.compressed is False
+    assert out.content == sample_log
+    assert backend.calls == []
+
+
+def test_budget_comes_from_backend_when_not_set(sample_log: str) -> None:
+    backend = FakeBackend(("test_login_redirect",))
+    backend.max_input_tokens = 50  # type: ignore[attr-defined]
+    assert SqueezCompressor(backend).compress(_inp(sample_log)).compressed is False
+    assert backend.calls == []
+
+    backend.max_input_tokens = 100_000  # type: ignore[attr-defined]
+    assert SqueezCompressor(backend).compress(_inp(sample_log)).compressed is True
+
+
+def test_settings_budget_overrides_backend(sample_log: str) -> None:
+    backend = FakeBackend(("test_login_redirect",))
+    backend.max_input_tokens = 50  # type: ignore[attr-defined]
+    comp = SqueezCompressor(backend, SqueezSettings(max_tokens=100_000))
+    assert comp.compress(_inp(sample_log)).compressed is True
