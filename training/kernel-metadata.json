@@ -1,0 +1,13 @@
+{
+  "id": "deiupp/headroom-squeez-train-ettin32m",
+  "title": "headroom-squeez train ettin32m",
+  "code_file": "kaggle_train_pooled.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "dataset_sources": [],
+  "competition_sources": [],
+  "kernel_sources": []
+}
