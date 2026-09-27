@@ -1,0 +1,12 @@
+headroom-squeez
+Copyright 2026 headroom-squeez contributors
+
+This product is a plugin for Headroom (https://github.com/headroomlabs-ai/headroom),
+licensed under the Apache License, Version 2.0. It implements Headroom's
+``headroom.compressor`` contract and follows its coding conventions and tool
+configuration.
+
+This product uses the Squeez approach and models by KRLabs
+(https://github.com/KRLabsOrg/squeez), licensed under the Apache License,
+Version 2.0, including the model KRLabsOrg/verbatim-rag-modern-bert-v2 and the
+dataset KRLabsOrg/tool-output-extraction-swebench.

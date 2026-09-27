@@ -1,0 +1,92 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "headroom-squeez"
+version = "0.1.0"
+description = "Task-conditioned line pruning for Headroom, powered by the Squeez span model"
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.10"
+authors = [
+    { name = "headroom-squeez contributors" }
+]
+keywords = ["headroom", "squeez", "context", "compression", "llm", "agents"]
+classifiers = [
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+dependencies = [
+    # The external-compressor seam (compressor_registry + router dispatch) is
+    # young; cap the minor so a contract change cannot silently break us.
+    "headroom-ai>=0.39,<0.40",
+]
+
+[project.optional-dependencies]
+# The span model. Kept optional so the package installs (and fails open) on
+# machines without torch; ``pip install headroom-squeez[model]`` to enable it.
+model = [
+    "torch>=2.1",
+    "transformers>=4.48",
+]
+bench = [
+    "datasets>=2.18",
+]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.6",
+    "mypy>=1.10",
+    # numpy>=2.3 stubs use 3.12-only syntax, which breaks mypy at python_version 3.10.
+    "numpy<2.3",
+]
+
+[project.entry-points."headroom.compressor"]
+squeez = "headroom_squeez.compressor:SqueezCompressor"
+
+[tool.hatch.build.targets.wheel]
+packages = ["headroom_squeez"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "UP",  # pyupgrade
+]
+ignore = [
+    "E501",  # line too long (handled by formatter)
+    "B008",  # do not perform function calls in argument defaults
+    "B905",  # zip without strict parameter
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["headroom_squeez"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --tb=short -m 'not slow'"
+markers = [
+    "slow: slow tests (model loads, large fixtures)",
+]
