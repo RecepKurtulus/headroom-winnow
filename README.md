@@ -48,7 +48,8 @@ If the model can't load, it logs one warning and Headroom's own path takes over.
 |---|---|
 | `HEADROOM_SQUEEZ_MODEL` | `KRLabsOrg/verbatim-rag-modern-bert-v2` |
 | `HEADROOM_SQUEEZ_REVISION` | pinned commit of the default model |
-| `HEADROOM_SQUEEZ_DEVICE` | `cpu` |
+| `HEADROOM_SQUEEZ_DEVICE` | `auto` (CUDA if available, else CPU) |
+| `HEADROOM_SQUEEZ_DTYPE` | `float32` |
 
 ## Known limitations
 

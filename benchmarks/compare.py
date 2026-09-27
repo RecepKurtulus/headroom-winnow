@@ -197,11 +197,12 @@ class SqueezRunner:
             padding=True,
             return_tensors="pt",
         )
+        device = b.resolved_device()
         with torch.inference_mode():
             logits = model(
-                input_ids=enc["input_ids"].to(b.device),
-                attention_mask=enc["attention_mask"].to(b.device),
-            ).logits
+                input_ids=enc["input_ids"].to(device),
+                attention_mask=enc["attention_mask"].to(device),
+            ).logits.float()
         positive = torch.softmax(logits, dim=-1)[..., 1:].sum(dim=-1).cpu()
 
         starts, pos = [], 0
@@ -307,7 +308,7 @@ def _timed(fn: Callable[..., Any], *args: Any) -> tuple[Any, float]:
     return out, time.perf_counter() - t0
 
 
-def run(samples: list[Sample], methods: set[str]) -> Collector:
+def run(samples: list[Sample], methods: set[str], backend: HighlighterBackend) -> Collector:
     col = Collector()
     bm25 = BM25Scorer()
     hybrid: RelevanceScorer | None = None
@@ -319,9 +320,7 @@ def run(samples: list[Sample], methods: set[str]) -> Collector:
                 "rs-hybrid needs fastembed (pip install fastembed); or pass --methods without it"
             )
         hybrid = HybridScorer()
-    runner = (
-        SqueezRunner(HighlighterBackend()) if methods & {"squeez-raw", "headroom-squeez"} else None
-    )
+    runner = SqueezRunner(backend) if methods & {"squeez-raw", "headroom-squeez"} else None
 
     for n, s in enumerate(samples, 1):
         lines = split_lines(s.tool_output)
@@ -440,18 +439,24 @@ def main(argv: list[str] | None = None) -> int:
         default="rs-bm25,rs-hybrid,squeez-raw,headroom-squeez",
         help="comma-separated subset of rs-bm25, rs-hybrid, squeez-raw, headroom-squeez",
     )
+    ap.add_argument("--max-length", type=int, default=8192, help="model token window")
+    ap.add_argument("--stride", type=int, default=256, help="token overlap between windows")
+    ap.add_argument("--device", default=None, help="cpu, cuda, or auto (default: backend's)")
     ap.add_argument("--out", type=Path, default=Path(__file__).parent / "results")
     args = ap.parse_args(argv)
 
     samples = load_samples(args.split, args.limit)
     print(f"{len(samples)} samples from {DATASET}:{args.split}", file=sys.stderr)
-    col = run(samples, set(args.methods.split(",")))
+    backend = HighlighterBackend(
+        device=args.device, max_length=args.max_length, doc_stride=args.stride
+    )
+    col = run(samples, set(args.methods.split(",")), backend)
     summary = summarize(col)
     table = to_markdown(summary)
     print(table)
 
     args.out.mkdir(parents=True, exist_ok=True)
-    stem = f"{args.split}-{len(samples)}"
+    stem = f"{args.split}-{len(samples)}-L{args.max_length}-{backend.resolved_device()}"
     (args.out / f"{stem}.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     (args.out / f"{stem}.md").write_text(table + "\n", encoding="utf-8")
     return 0

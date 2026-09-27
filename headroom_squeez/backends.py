@@ -52,6 +52,7 @@ DEFAULT_REVISION = "6a967332efedfe5aca9b85b8310cc68d9ac6f881"
 _ENV_MODEL = "HEADROOM_SQUEEZ_MODEL"
 _ENV_REVISION = "HEADROOM_SQUEEZ_REVISION"
 _ENV_DEVICE = "HEADROOM_SQUEEZ_DEVICE"
+_ENV_DTYPE = "HEADROOM_SQUEEZ_DTYPE"
 
 
 class BackendUnavailableError(RuntimeError):
@@ -80,8 +81,11 @@ class HighlighterBackend:
         revision: Commit to load. Defaults to ``$HEADROOM_SQUEEZ_REVISION``, or
             :data:`DEFAULT_REVISION` when the default model is used. A custom
             model without a revision loads ``main``.
-        device: ``"cpu"``, ``"cuda"``, ... Defaults to ``$HEADROOM_SQUEEZ_DEVICE``
-            or ``"cpu"`` (the target environment is a developer laptop).
+        device: ``"cpu"``, ``"cuda"``, ... or ``"auto"`` (CUDA when available,
+            else CPU). Defaults to ``$HEADROOM_SQUEEZ_DEVICE`` or ``"auto"``.
+        dtype: ``"float32"`` or ``"float16"``. Defaults to ``$HEADROOM_SQUEEZ_DTYPE``
+            or ``"float32"``: float16 is not a safe default, since GPUs without
+            tensor cores (e.g. GTX 16xx) run it several times slower than float32.
         threshold: Per-token probability for a token to join a span. Squeez's
             recall-tuned value for technical content.
         min_span_chars: Spans shorter than this are discarded by the model.
@@ -96,6 +100,7 @@ class HighlighterBackend:
         revision: str | None = None,
         *,
         device: str | None = None,
+        dtype: str | None = None,
         threshold: float = 0.1,
         min_span_chars: int = 10,
         merge_gap_chars: int = 20,
@@ -110,7 +115,8 @@ class HighlighterBackend:
             self.revision = env_revision
         else:
             self.revision = DEFAULT_REVISION if self.model_id == DEFAULT_MODEL else None
-        self.device = device or os.environ.get(_ENV_DEVICE) or "cpu"
+        self.device = device or os.environ.get(_ENV_DEVICE) or "auto"
+        self.dtype = dtype or os.environ.get(_ENV_DTYPE) or "float32"
         self.threshold = threshold
         self.min_span_chars = min_span_chars
         self.merge_gap_chars = merge_gap_chars
@@ -118,6 +124,17 @@ class HighlighterBackend:
         self.doc_stride = doc_stride
         self._model: Any = None
         self._lock = threading.Lock()
+
+    def resolved_device(self) -> str:
+        """Return the concrete device ``"auto"`` resolves to in this process."""
+        if self.device != "auto":
+            return self.device
+        try:
+            import torch
+
+            return "cuda" if torch.cuda.is_available() else "cpu"
+        except Exception:  # noqa: BLE001 - no torch means the load will fail anyway
+            return "cpu"
 
     def _load(self) -> Any:
         """Load (once) and return the model; raise ``BackendUnavailableError`` on failure."""
@@ -127,23 +144,26 @@ class HighlighterBackend:
             if self._model is not None:
                 return self._model
             try:
+                import torch
                 from transformers import AutoModel, AutoTokenizer
 
+                device = self.resolved_device()
+                dtype = getattr(torch, self.dtype)
                 model = AutoModel.from_pretrained(
-                    self.model_id, revision=self.revision, trust_remote_code=True
+                    self.model_id, revision=self.revision, trust_remote_code=True, dtype=dtype
                 )
                 # process() lazily loads its tokenizer by name at ``main``;
                 # pre-seed it so tokenizer and weights come from one commit.
                 model._tokenizer = AutoTokenizer.from_pretrained(
                     self.model_id, revision=self.revision, use_fast=True
                 )
-                model.to(self.device)
+                model.to(device)
                 model.eval()
             except Exception as exc:  # noqa: BLE001 - any load failure disables the backend
                 raise BackendUnavailableError(
                     f"cannot load {self.model_id}@{self.revision or 'main'}: {exc}"
                 ) from exc
-            log.debug("loaded %s@%s on %s", self.model_id, self.revision, self.device)
+            log.debug("loaded %s@%s on %s", self.model_id, self.revision, device)
             self._model = model
             return model
 
