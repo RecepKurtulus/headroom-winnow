@@ -36,7 +36,7 @@ from headroom.transforms.compressor_registry import (
     CompressOutput,
 )
 
-from .backends import BackendUnavailableError, HighlighterBackend, SpanBackend
+from .backends import BackendUnavailableError, SpanBackend, make_backend
 from .selection import expand_keep, lines_touched, mandatory_lines, render, split_lines
 
 log = logging.getLogger(__name__)
@@ -82,9 +82,10 @@ class SqueezCompressor:
     """Task-conditioned line pruner implementing Headroom's ``Compressor`` protocol.
 
     Args:
-        backend: Span backend. Defaults to a lazily loaded
-            :class:`~headroom_squeez.backends.HighlighterBackend`; constructing
-            it loads nothing, so discovery stays cheap.
+        backend: Span backend. Defaults to the one
+            :func:`~headroom_squeez.backends.make_backend` picks
+            (``$HEADROOM_SQUEEZ_BACKEND``); constructing it loads nothing, so
+            discovery stays cheap.
         settings: Pruning knobs.
     """
 
@@ -93,7 +94,7 @@ class SqueezCompressor:
         backend: SpanBackend | None = None,
         settings: SqueezSettings | None = None,
     ) -> None:
-        self._backend: SpanBackend = backend if backend is not None else HighlighterBackend()
+        self._backend: SpanBackend = backend if backend is not None else make_backend()
         self._settings = settings or SqueezSettings()
         self._disabled_reason: str | None = None
 

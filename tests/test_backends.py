@@ -10,6 +10,9 @@ from headroom_squeez.backends import (
     DEFAULT_MODEL,
     DEFAULT_REVISION,
     HighlighterBackend,
+    PooledBackend,
+    lines_to_spans,
+    make_backend,
 )
 
 
@@ -49,3 +52,26 @@ def test_env_configures_backend(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("HEADROOM_SQUEEZ_DTYPE", "float16")
     b = HighlighterBackend()
     assert (b.resolved_device(), b.dtype) == ("cpu", "float16")
+
+
+def test_lines_to_spans_covers_kept_lines_only() -> None:
+    content = "keep me\nskip\n\nkeep too\n"
+    spans = lines_to_spans(content, [0.9, 0.1, 0.9, 0.5, 0.0], threshold=0.5)
+    assert [content[s:e] for s, e in spans] == ["keep me", "keep too"]
+
+
+def test_make_backend_selects_by_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    assert isinstance(make_backend(), HighlighterBackend)
+    monkeypatch.setenv("HEADROOM_SQUEEZ_BACKEND", "pooled")
+    monkeypatch.setenv("HEADROOM_SQUEEZ_MODEL", "some/dir")
+    backend = make_backend()
+    assert isinstance(backend, PooledBackend)
+    assert backend.model_id == "some/dir"
+    assert backend._model is None
+    monkeypatch.setenv("HEADROOM_SQUEEZ_BACKEND", "nonsense")
+    assert isinstance(make_backend(), HighlighterBackend)
+
+
+def test_pooled_needs_a_model() -> None:
+    with pytest.raises(ValueError, match="HEADROOM_SQUEEZ_MODEL"):
+        PooledBackend()

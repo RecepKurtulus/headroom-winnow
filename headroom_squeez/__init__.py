@@ -9,15 +9,23 @@ See :class:`~headroom_squeez.compressor.SqueezCompressor` for the contract.
 
 from __future__ import annotations
 
-from .backends import BackendUnavailableError, HighlighterBackend, SpanBackend
+from .backends import (
+    BackendUnavailableError,
+    HighlighterBackend,
+    PooledBackend,
+    SpanBackend,
+    make_backend,
+)
 from .compressor import SqueezCompressor, SqueezSettings
 
 __all__ = [
     "BackendUnavailableError",
     "HighlighterBackend",
+    "PooledBackend",
     "SpanBackend",
     "SqueezCompressor",
     "SqueezSettings",
+    "make_backend",
 ]
 
 __version__ = "0.1.0"

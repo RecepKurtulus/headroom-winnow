@@ -52,7 +52,7 @@ from headroom.tokenizers.estimator import EstimatingTokenCounter
 from headroom.transforms.compressor_registry import CompressInput
 from headroom.transforms.relevance_split import plan_relevance_split
 
-from headroom_squeez.backends import HighlighterBackend
+from headroom_squeez.backends import HighlighterBackend, PooledBackend, lines_to_spans
 from headroom_squeez.compressor import SqueezCompressor, SqueezSettings
 from headroom_squeez.selection import mandatory_lines, split_lines
 
@@ -165,6 +165,21 @@ def score_result(sample: Sample, lines: list[str], res: Result) -> Row:
 
 
 # ── squeez model: one forward pass → spans (as process()) + per-line scores ──
+
+
+class PooledRunner:
+    """Runs a pooled line classifier once per sample: kept-line spans + line scores."""
+
+    def __init__(self, backend: PooledBackend) -> None:
+        self.backend = backend
+
+    def run(
+        self, query: str, content: str, lines: list[str]
+    ) -> tuple[list[tuple[int, int]], list[float]]:
+        probs = self.backend.line_probabilities(query, content)
+        # The model splits on every newline; split_lines drops a trailing
+        # empty line, so trim to align.
+        return lines_to_spans(content, probs, self.backend.threshold), probs[: len(lines)]
 
 
 class SqueezRunner:
@@ -310,7 +325,9 @@ def _timed(fn: Callable[..., Any], *args: Any) -> tuple[Any, float]:
     return out, time.perf_counter() - t0
 
 
-def run(samples: list[Sample], methods: set[str], backend: HighlighterBackend) -> Collector:
+def run(
+    samples: list[Sample], methods: set[str], backend: HighlighterBackend | PooledBackend
+) -> Collector:
     col = Collector()
     bm25 = BM25Scorer()
     hybrid: RelevanceScorer | None = None
@@ -322,7 +339,13 @@ def run(samples: list[Sample], methods: set[str], backend: HighlighterBackend) -
                 "rs-hybrid needs fastembed (pip install fastembed); or pass --methods without it"
             )
         hybrid = HybridScorer()
-    runner = SqueezRunner(backend) if methods & {"squeez-raw", "headroom-squeez"} else None
+    runner: SqueezRunner | PooledRunner | None = None
+    if methods & {"squeez-raw", "headroom-squeez"}:
+        runner = (
+            SqueezRunner(backend)
+            if isinstance(backend, HighlighterBackend)
+            else PooledRunner(backend)
+        )
 
     for n, s in enumerate(samples, 1):
         lines = split_lines(s.tool_output)
@@ -451,21 +474,30 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--max-length", type=int, default=8192, help="model token window")
     ap.add_argument("--stride", type=int, default=256, help="token overlap between windows")
     ap.add_argument("--device", default=None, help="cpu, cuda, or auto (default: backend's)")
+    ap.add_argument(
+        "--backend", default="highlighter", choices=["highlighter", "pooled"], help="squeez model"
+    )
+    ap.add_argument("--model-path", default=None, help="pooled model dir or hub id")
     ap.add_argument("--out", type=Path, default=Path(__file__).parent / "results")
     args = ap.parse_args(argv)
 
     samples = load_samples(args.split, args.limit)
     print(f"{len(samples)} samples from {DATASET}:{args.split}", file=sys.stderr)
-    backend = HighlighterBackend(
-        device=args.device, max_length=args.max_length, doc_stride=args.stride
-    )
+    backend: HighlighterBackend | PooledBackend
+    if args.backend == "pooled":
+        backend = PooledBackend(args.model_path, device=args.device)
+    else:
+        backend = HighlighterBackend(
+            device=args.device, max_length=args.max_length, doc_stride=args.stride
+        )
     col = run(samples, set(args.methods.split(",")), backend)
     summary = summarize(col)
     table = to_markdown(summary)
     print(table)
 
     args.out.mkdir(parents=True, exist_ok=True)
-    stem = f"{args.split}-{len(samples)}-L{args.max_length}-{backend.resolved_device()}"
+    model_tag = f"L{args.max_length}" if args.backend == "highlighter" else "pooled"
+    stem = f"{args.split}-{len(samples)}-{model_tag}-{backend.resolved_device()}"
     (args.out / f"{stem}.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     (args.out / f"{stem}.md").write_text(table + "\n", encoding="utf-8")
     return 0
