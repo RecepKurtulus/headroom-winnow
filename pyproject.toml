@@ -3,16 +3,16 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "headroom-squeez"
+name = "headroom-winnow"
 version = "0.1.0"
-description = "Task-aware pruning of coding-agent tool output for Headroom, powered by Squeez models"
+description = "Winnow: task-aware pruning of coding-agent tool output for Headroom, powered by Squeez models"
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.10"
 authors = [
     { name = "Recep Kurtulus" }
 ]
-keywords = ["headroom", "squeez", "context", "compression", "llm", "agents"]
+keywords = ["winnow", "headroom", "squeez", "context", "compression", "llm", "agents"]
 classifiers = [
     "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3",
@@ -28,13 +28,13 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/RecepKurtulus/headroom-squeez"
-Issues = "https://github.com/RecepKurtulus/headroom-squeez/issues"
-Benchmarks = "https://github.com/RecepKurtulus/headroom-squeez/blob/main/benchmarks/RESULTS.md"
+Homepage = "https://github.com/RecepKurtulus/headroom-winnow"
+Issues = "https://github.com/RecepKurtulus/headroom-winnow/issues"
+Benchmarks = "https://github.com/RecepKurtulus/headroom-winnow/blob/main/benchmarks/RESULTS.md"
 
 [project.optional-dependencies]
 # The span model. Kept optional so the package installs (and fails open) on
-# machines without torch; ``pip install headroom-squeez[model]`` to enable it.
+# machines without torch; ``pip install headroom-winnow[model]`` to enable it.
 model = [
     "torch>=2.1",
     "transformers>=4.48",
@@ -51,10 +51,10 @@ dev = [
 ]
 
 [project.entry-points."headroom.compressor"]
-squeez = "headroom_squeez.compressor:SqueezCompressor"
+squeez = "headroom_winnow.compressor:WinnowCompressor"
 
 [tool.hatch.build.targets.wheel]
-packages = ["headroom_squeez"]
+packages = ["headroom_winnow"]
 
 [tool.ruff]
 target-version = "py310"
@@ -77,7 +77,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["headroom_squeez"]
+known-first-party = ["headroom_winnow"]
 
 [tool.ruff.format]
 quote-style = "double"

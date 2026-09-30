@@ -2,9 +2,9 @@
 
 Install the package and opt in by name; installing alone changes nothing::
 
-    ContentRouterConfig(active_external_compressors=["squeez"])
+    ContentRouterConfig(active_external_compressors=["winnow"])
 
-See :class:`~headroom_squeez.compressor.SqueezCompressor` for the contract.
+See :class:`~headroom_winnow.compressor.WinnowCompressor` for the contract.
 """
 
 from __future__ import annotations
@@ -16,15 +16,15 @@ from .backends import (
     SpanBackend,
     make_backend,
 )
-from .compressor import SqueezCompressor, SqueezSettings
+from .compressor import WinnowCompressor, WinnowSettings
 
 __all__ = [
     "BackendUnavailableError",
     "HighlighterBackend",
     "PooledBackend",
     "SpanBackend",
-    "SqueezCompressor",
-    "SqueezSettings",
+    "WinnowCompressor",
+    "WinnowSettings",
     "make_backend",
 ]
 

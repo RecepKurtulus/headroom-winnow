@@ -1,4 +1,4 @@
-"""Gate 3: does headroom-squeez beat Headroom's own ``relevance_split``?
+"""Gate 3: does headroom-winnow beat Headroom's own ``relevance_split``?
 
 Runs every method on the same split of ``KRLabsOrg/tool-output-extraction-swebench``
 (query + raw tool output + gold relevant lines) and reports, per method:
@@ -15,7 +15,7 @@ Two views, because they answer different questions:
 
   **Natural operating point.** Each method runs as it would in production:
   ``relevance_split`` with Headroom's defaults (adaptive Otsu cut floored at
-  0.25) and ``headroom-squeez`` through ``SqueezCompressor.compress`` with all
+  0.25) and ``headroom-winnow`` through ``WinnowCompressor.compress`` with all
   its gates and safety rules. ``squeez-raw`` is the bare model (lines touched
   by a span), i.e. Squeez's own ``verbatim_v2`` baseline. For the
   ``relevance_split`` rows the dropped tail is simply dropped; in Headroom it
@@ -52,9 +52,9 @@ from headroom.tokenizers.estimator import EstimatingTokenCounter
 from headroom.transforms.compressor_registry import CompressInput
 from headroom.transforms.relevance_split import plan_relevance_split
 
-from headroom_squeez.backends import HighlighterBackend, PooledBackend, lines_to_spans
-from headroom_squeez.compressor import SqueezCompressor, SqueezSettings
-from headroom_squeez.selection import mandatory_lines, split_lines
+from headroom_winnow.backends import HighlighterBackend, PooledBackend, lines_to_spans
+from headroom_winnow.compressor import WinnowCompressor, WinnowSettings
+from headroom_winnow.selection import mandatory_lines, split_lines
 
 DATASET = "KRLabsOrg/tool-output-extraction-swebench"
 RATIOS = (0.5, 0.7, 0.9)
@@ -186,7 +186,7 @@ class SqueezRunner:
     """Runs the highlighter once per sample and derives both views from it.
 
     Mirrors ``VerbatimRagHighlighter.process`` (revision pinned in
-    ``headroom_squeez.backends``) step for step, but also keeps the per-token
+    ``headroom_winnow.backends``) step for step, but also keeps the per-token
     probabilities so lines can be ranked for the fixed-budget view without a
     second forward pass.
     """
@@ -340,7 +340,7 @@ def run(
             )
         hybrid = HybridScorer()
     runner: SqueezRunner | PooledRunner | None = None
-    if methods & {"squeez-raw", "headroom-squeez"}:
+    if methods & {"squeez-raw", "headroom-winnow"}:
         runner = (
             SqueezRunner(backend)
             if isinstance(backend, HighlighterBackend)
@@ -368,19 +368,19 @@ def run(
         if runner is not None:
             (spans, sq_scores), fwd = _timed(runner.run, s.query, s.tool_output, lines)
             if "squeez-raw" in methods:
-                from headroom_squeez.selection import lines_touched
+                from headroom_winnow.selection import lines_touched
 
                 kept = lines_touched(spans, lines)
                 col.add("squeez-raw", score_result(s, lines, Result(kept, keep_text(kept), fwd)))
-            if "headroom-squeez" in methods:
+            if "headroom-winnow" in methods:
                 # As shipped (token budget for this device), and unbounded to
                 # show what the budget costs in recall and compression.
                 for name, budget in (
-                    ("headroom-squeez", backend.max_input_tokens),
-                    ("headroom-squeez-unbounded", 10**9),
+                    ("headroom-winnow", backend.max_input_tokens),
+                    ("headroom-winnow-unbounded", 10**9),
                 ):
                     fixed = _FixedSpans(spans)
-                    comp = SqueezCompressor(fixed, SqueezSettings(max_tokens=budget))
+                    comp = WinnowCompressor(fixed, WinnowSettings(max_tokens=budget))
                     out, sel = _timed(
                         comp.compress, CompressInput(s.tool_output, "text/plain", s.query)
                     )
@@ -468,8 +468,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--limit", type=int, default=None)
     ap.add_argument(
         "--methods",
-        default="rs-bm25,rs-hybrid,squeez-raw,headroom-squeez",
-        help="comma-separated subset of rs-bm25, rs-hybrid, squeez-raw, headroom-squeez",
+        default="rs-bm25,rs-hybrid,squeez-raw,headroom-winnow",
+        help="comma-separated subset of rs-bm25, rs-hybrid, squeez-raw, headroom-winnow",
     )
     ap.add_argument("--max-length", type=int, default=8192, help="model token window")
     ap.add_argument("--stride", type=int, default=256, help="token overlap between windows")

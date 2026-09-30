@@ -29,9 +29,9 @@ context, first/last lines) and gates.
 |---|---|---|---|---|---|
 | relevance_split, BM25 (tail dropped)¹ | 0.725 | 58.6% | 7,953 | 1 ms | 4 ms |
 | relevance_split, hybrid (tail dropped)¹ | 0.753 | 57.6% | 7,771 | 2.2 s | 8.6 s |
-| headroom-squeez, 150M highlighter, unbounded | 0.836 | 39.7% | **0** | 1.5 s | 9.0 s |
-| headroom-squeez, 150M highlighter, 2,048-token budget | 0.905 | 9.0% | **0** | 1 ms² | 0.8 s |
-| **headroom-squeez, 32M pooled** | **0.847** | **41.4%** | **0** | **0.29 s** | **0.92 s** |
+| Winnow, 150M highlighter, unbounded | 0.836 | 39.7% | **0** | 1.5 s | 9.0 s |
+| Winnow, 150M highlighter, 2,048-token budget | 0.905 | 9.0% | **0** | 1 ms² | 0.8 s |
+| **Winnow, 32M pooled** | **0.847** | **41.4%** | **0** | **0.29 s** | **0.92 s** |
 
 ¹ Inside Headroom the low-relevance tail is Kompressed rather than dropped, so
 these token reductions are an upper bound.
@@ -55,7 +55,7 @@ these token reductions are an upper bound.
 python benchmarks/compare.py --device cuda
 
 # 32M pooled model (trained with training/kaggle_train_pooled.ipynb)
-HEADROOM_SQUEEZ_MAX_TOKENS=1000000000 python benchmarks/compare.py --device cuda \
+HEADROOM_WINNOW_MAX_TOKENS=1000000000 python benchmarks/compare.py --device cuda \
     --backend pooled --model-path path/to/squeez_pooled_ettin32m \
-    --methods squeez-raw,headroom-squeez
+    --methods squeez-raw,headroom-winnow
 ```

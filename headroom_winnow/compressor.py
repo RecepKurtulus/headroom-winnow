@@ -1,4 +1,4 @@
-"""``SqueezCompressor``: the ``headroom.compressor`` entry point.
+"""``WinnowCompressor``: the ``headroom.compressor`` entry point.
 
 Headroom's content router hands a selected external compressor one block of
 tool output plus a query (the user's prompt, enriched with the triggering tool
@@ -13,7 +13,7 @@ a task-conditioned line pruner:
      instead), or when the backend is known to be unavailable.
   2. **Score** — ask the span backend which characters matter for the query.
   3. **Protect** — keep failure lines, tracebacks, neighbours and edges no
-     matter what the model said (:mod:`headroom_squeez.selection`).
+     matter what the model said (:mod:`headroom_winnow.selection`).
   4. **Render** — replace each dropped run with a ``<<ccr:HASH N_lines_offloaded>>``
      marker and return ``hash -> original`` in ``recoverable`` so the router can
      persist it for retrieval.
@@ -41,9 +41,9 @@ from .selection import expand_keep, lines_touched, mandatory_lines, render, spli
 
 log = logging.getLogger(__name__)
 
-__all__ = ["CONTENT_TYPES", "COMPRESSOR_NAME", "SqueezCompressor", "SqueezSettings"]
+__all__ = ["CONTENT_TYPES", "COMPRESSOR_NAME", "WinnowCompressor", "WinnowSettings"]
 
-COMPRESSOR_NAME = "squeez"
+COMPRESSOR_NAME = "winnow"
 
 #: MIME types we accept from the router. JSON, code, HTML, CSV and config are
 #: left to Headroom's structure-aware compressors.
@@ -58,7 +58,7 @@ _TOKENS = EstimatingTokenCounter()
 
 
 @dataclass(frozen=True)
-class SqueezSettings:
+class WinnowSettings:
     """Pruning knobs. Defaults are recall-first.
 
     Attributes:
@@ -78,13 +78,13 @@ class SqueezSettings:
     max_tokens: int | None = None
 
 
-class SqueezCompressor:
+class WinnowCompressor:
     """Task-conditioned line pruner implementing Headroom's ``Compressor`` protocol.
 
     Args:
         backend: Span backend. Defaults to the one
-            :func:`~headroom_squeez.backends.make_backend` picks
-            (``$HEADROOM_SQUEEZ_BACKEND``); constructing it loads nothing, so
+            :func:`~headroom_winnow.backends.make_backend` picks
+            (``$HEADROOM_WINNOW_BACKEND``); constructing it loads nothing, so
             discovery stays cheap.
         settings: Pruning knobs.
     """
@@ -92,10 +92,10 @@ class SqueezCompressor:
     def __init__(
         self,
         backend: SpanBackend | None = None,
-        settings: SqueezSettings | None = None,
+        settings: WinnowSettings | None = None,
     ) -> None:
         self._backend: SpanBackend = backend if backend is not None else make_backend()
-        self._settings = settings or SqueezSettings()
+        self._settings = settings or WinnowSettings()
         self._disabled_reason: str | None = None
 
     @property
@@ -122,7 +122,7 @@ class SqueezCompressor:
         try:
             return self._compress(inp)
         except Exception as exc:  # noqa: BLE001 - never break the request; router falls back
-            log.warning("squeez: unexpected failure, passing through: %s", exc)
+            log.warning("winnow: unexpected failure, passing through: %s", exc)
             return self._passthrough(inp.content, f"error: {exc}")
 
     def _compress(self, inp: CompressInput) -> CompressOutput:
@@ -149,10 +149,10 @@ class SqueezCompressor:
             # One warning per process; every later block skips straight to
             # passthrough instead of retrying a download or import.
             self._disabled_reason = f"backend unavailable: {exc}"
-            log.warning("squeez: disabled for this process: %s", exc)
+            log.warning("winnow: disabled for this process: %s", exc)
             return self._passthrough(content, self._disabled_reason)
         except Exception as exc:  # noqa: BLE001 - a single bad inference must not break the request
-            log.warning("squeez: inference failed, passing through: %s", exc)
+            log.warning("winnow: inference failed, passing through: %s", exc)
             return self._passthrough(content, f"inference failed: {exc}")
 
         if not spans:
@@ -189,7 +189,7 @@ class SqueezCompressor:
 
     @staticmethod
     def _passthrough(content: str, reason: str, tokens: int | None = None) -> CompressOutput:
-        log.debug("squeez: passthrough (%s)", reason)
+        log.debug("winnow: passthrough (%s)", reason)
         count = tokens if tokens is not None else _TOKENS.count_text(content)
         return CompressOutput(
             content=content,

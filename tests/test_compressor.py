@@ -1,4 +1,4 @@
-"""``SqueezCompressor`` against the contract, with a fake backend."""
+"""``WinnowCompressor`` against the contract, with a fake backend."""
 
 from __future__ import annotations
 
@@ -12,8 +12,8 @@ from headroom.transforms.compressor_registry import (
     CompressOutput,
 )
 
-from headroom_squeez.compressor import CONTENT_TYPES, SqueezCompressor, SqueezSettings
-from headroom_squeez.markers import MARKER_RE
+from headroom_winnow.compressor import CONTENT_TYPES, WinnowCompressor, WinnowSettings
+from headroom_winnow.markers import MARKER_RE
 
 QUERY = "why does test_login_redirect fail"
 
@@ -30,22 +30,22 @@ def _restore(out: CompressOutput) -> str:
 
 
 def test_satisfies_protocol_and_descriptor() -> None:
-    comp = SqueezCompressor(FakeBackend())
+    comp = WinnowCompressor(FakeBackend())
     assert isinstance(comp, Compressor)
     d = comp.descriptor
-    assert d.name == "squeez"
+    assert d.name == "winnow"
     assert d.content_types == list(CONTENT_TYPES)
     assert (d.lossless, d.cost_tier, d.recoverable) == (False, "ml", True)
 
 
 def test_default_construction_loads_nothing() -> None:
-    comp = SqueezCompressor()
+    comp = WinnowCompressor()
     assert comp._backend._model is None  # type: ignore[attr-defined]
 
 
 def test_prunes_and_keeps_what_matters(sample_log: str) -> None:
     backend = FakeBackend(("test_login_redirect",))
-    out = SqueezCompressor(backend).compress(_inp(sample_log))
+    out = WinnowCompressor(backend).compress(_inp(sample_log))
 
     assert out.compressed is True
     assert backend.calls == [(QUERY, sample_log)]
@@ -64,7 +64,7 @@ def test_prunes_and_keeps_what_matters(sample_log: str) -> None:
 
 
 def test_output_is_deterministic(sample_log: str) -> None:
-    comp = SqueezCompressor(FakeBackend(("test_login_redirect",)))
+    comp = WinnowCompressor(FakeBackend(("test_login_redirect",)))
     assert comp.compress(_inp(sample_log)) == comp.compress(_inp(sample_log))
 
 
@@ -80,7 +80,7 @@ def test_output_is_deterministic(sample_log: str) -> None:
     ids=["no-query", "blank-query", "too-short", "no-spans", "low-savings"],
 )
 def test_passthrough_cases(content: str, query: str, keywords: tuple[str, ...]) -> None:
-    out = SqueezCompressor(FakeBackend(keywords)).compress(_inp(content, query))
+    out = WinnowCompressor(FakeBackend(keywords)).compress(_inp(content, query))
     assert out.compressed is False
     assert out.content == content
     assert out.recoverable == {}
@@ -90,8 +90,8 @@ def test_backend_unavailable_warns_once_then_skips(
     sample_log: str, caplog: pytest.LogCaptureFixture
 ) -> None:
     backend = FakeBackend(unavailable=True)
-    comp = SqueezCompressor(backend)
-    with caplog.at_level(logging.WARNING, logger="headroom_squeez"):
+    comp = WinnowCompressor(backend)
+    with caplog.at_level(logging.WARNING, logger="headroom_winnow"):
         first = comp.compress(_inp(sample_log))
         second = comp.compress(_inp(sample_log))
     assert first.compressed is False and second.compressed is False
@@ -102,7 +102,7 @@ def test_backend_unavailable_warns_once_then_skips(
 
 def test_inference_error_passes_through_without_disabling(sample_log: str) -> None:
     backend = FakeBackend(raises=True)
-    comp = SqueezCompressor(backend)
+    comp = WinnowCompressor(backend)
     assert comp.compress(_inp(sample_log)).compressed is False
     assert comp.compress(_inp(sample_log)).compressed is False
     assert len(backend.calls) == 2
@@ -113,19 +113,19 @@ def test_never_raises_on_bad_backend_output(sample_log: str) -> None:
         def find_spans(self, query: str, content: str) -> list[tuple[int, int]]:
             return [("a", "b")]  # type: ignore[list-item]
 
-    out = SqueezCompressor(Broken()).compress(_inp(sample_log))
+    out = WinnowCompressor(Broken()).compress(_inp(sample_log))
     assert out.compressed is False
     assert out.content == sample_log
 
 
 def test_settings_are_respected(sample_log: str) -> None:
-    comp = SqueezCompressor(FakeBackend(("test_login_redirect",)), SqueezSettings(min_lines=10_000))
+    comp = WinnowCompressor(FakeBackend(("test_login_redirect",)), WinnowSettings(min_lines=10_000))
     assert comp.compress(_inp(sample_log)).compressed is False
 
 
 def test_over_budget_passes_through_without_calling_the_model(sample_log: str) -> None:
     backend = FakeBackend(("test_login_redirect",))
-    comp = SqueezCompressor(backend, SqueezSettings(max_tokens=50))
+    comp = WinnowCompressor(backend, WinnowSettings(max_tokens=50))
     out = comp.compress(_inp(sample_log))
     assert out.compressed is False
     assert out.content == sample_log
@@ -135,15 +135,15 @@ def test_over_budget_passes_through_without_calling_the_model(sample_log: str) -
 def test_budget_comes_from_backend_when_not_set(sample_log: str) -> None:
     backend = FakeBackend(("test_login_redirect",))
     backend.max_input_tokens = 50  # type: ignore[attr-defined]
-    assert SqueezCompressor(backend).compress(_inp(sample_log)).compressed is False
+    assert WinnowCompressor(backend).compress(_inp(sample_log)).compressed is False
     assert backend.calls == []
 
     backend.max_input_tokens = 100_000  # type: ignore[attr-defined]
-    assert SqueezCompressor(backend).compress(_inp(sample_log)).compressed is True
+    assert WinnowCompressor(backend).compress(_inp(sample_log)).compressed is True
 
 
 def test_settings_budget_overrides_backend(sample_log: str) -> None:
     backend = FakeBackend(("test_login_redirect",))
     backend.max_input_tokens = 50  # type: ignore[attr-defined]
-    comp = SqueezCompressor(backend, SqueezSettings(max_tokens=100_000))
+    comp = WinnowCompressor(backend, WinnowSettings(max_tokens=100_000))
     assert comp.compress(_inp(sample_log)).compressed is True

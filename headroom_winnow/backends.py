@@ -5,7 +5,7 @@ The compressor only needs one thing from a model — character spans of
 :class:`SpanBackend` protocol. That keeps the pruning logic testable with a
 fake backend and lets models be swapped without touching the compressor.
 
-Two backends ship, selected by ``$HEADROOM_SQUEEZ_BACKEND`` (see
+Two backends ship, selected by ``$HEADROOM_WINNOW_BACKEND`` (see
 :func:`make_backend`):
 
   * :class:`HighlighterBackend` (default) wraps
@@ -69,12 +69,12 @@ DEFAULT_MODEL = "KRLabsOrg/verbatim-rag-modern-bert-v2"
 #: Commit of :data:`DEFAULT_MODEL` whose weights and remote code we reviewed.
 DEFAULT_REVISION = "6a967332efedfe5aca9b85b8310cc68d9ac6f881"
 
-_ENV_BACKEND = "HEADROOM_SQUEEZ_BACKEND"
-_ENV_MODEL = "HEADROOM_SQUEEZ_MODEL"
-_ENV_REVISION = "HEADROOM_SQUEEZ_REVISION"
-_ENV_DEVICE = "HEADROOM_SQUEEZ_DEVICE"
-_ENV_DTYPE = "HEADROOM_SQUEEZ_DTYPE"
-_ENV_MAX_TOKENS = "HEADROOM_SQUEEZ_MAX_TOKENS"
+_ENV_BACKEND = "HEADROOM_WINNOW_BACKEND"
+_ENV_MODEL = "HEADROOM_WINNOW_MODEL"
+_ENV_REVISION = "HEADROOM_WINNOW_REVISION"
+_ENV_DEVICE = "HEADROOM_WINNOW_DEVICE"
+_ENV_DTYPE = "HEADROOM_WINNOW_DTYPE"
+_ENV_MAX_TOKENS = "HEADROOM_WINNOW_MAX_TOKENS"
 
 
 class BackendUnavailableError(RuntimeError):
@@ -183,14 +183,14 @@ class HighlighterBackend(_TransformersBackend):
     """Verbatim-RAG ModernBERT highlighter, loaded on first use.
 
     Args:
-        model_id: Hugging Face repo id. Defaults to ``$HEADROOM_SQUEEZ_MODEL``
+        model_id: Hugging Face repo id. Defaults to ``$HEADROOM_WINNOW_MODEL``
             or :data:`DEFAULT_MODEL`.
-        revision: Commit to load. Defaults to ``$HEADROOM_SQUEEZ_REVISION``, or
+        revision: Commit to load. Defaults to ``$HEADROOM_WINNOW_REVISION``, or
             :data:`DEFAULT_REVISION` when the default model is used. A custom
             model without a revision loads ``main``.
         device: ``"cpu"``, ``"cuda"``, ... or ``"auto"`` (CUDA when available,
-            else CPU). Defaults to ``$HEADROOM_SQUEEZ_DEVICE`` or ``"auto"``.
-        dtype: ``"float32"`` or ``"float16"``. Defaults to ``$HEADROOM_SQUEEZ_DTYPE``
+            else CPU). Defaults to ``$HEADROOM_WINNOW_DEVICE`` or ``"auto"``.
+        dtype: ``"float32"`` or ``"float16"``. Defaults to ``$HEADROOM_WINNOW_DTYPE``
             or ``"float32"``: float16 is not a safe default, since GPUs without
             tensor cores (e.g. GTX 16xx) run it several times slower than float32.
         threshold: Per-token probability for a token to join a span. Squeez's
@@ -200,7 +200,7 @@ class HighlighterBackend(_TransformersBackend):
         max_length: Token window per forward pass.
         doc_stride: Token overlap between consecutive windows.
         max_input_tokens: Largest input to score. Defaults to
-            ``$HEADROOM_SQUEEZ_MAX_TOKENS``, else :attr:`cuda_token_budget` or
+            ``$HEADROOM_WINNOW_MAX_TOKENS``, else :attr:`cuda_token_budget` or
             :attr:`cpu_token_budget` for the resolved device.
     """
 
@@ -277,16 +277,16 @@ class PooledBackend(_TransformersBackend):
     Args:
         model_id: Local directory or Hugging Face repo with the trained model
             (it ships ``modeling_squeez_pooled.py`` for ``trust_remote_code``).
-            Defaults to ``$HEADROOM_SQUEEZ_MODEL``.
+            Defaults to ``$HEADROOM_WINNOW_MODEL``.
         revision: Commit to load for a hub repo. Defaults to
-            ``$HEADROOM_SQUEEZ_REVISION``.
+            ``$HEADROOM_WINNOW_REVISION``.
         device: As for :class:`HighlighterBackend`.
         dtype: As for :class:`HighlighterBackend`.
         threshold: Line probability at or above which a line is kept.
         max_input_tokens: As for :class:`HighlighterBackend`.
 
     Raises:
-        ValueError: If no model is given and ``$HEADROOM_SQUEEZ_MODEL`` is unset.
+        ValueError: If no model is given and ``$HEADROOM_WINNOW_MODEL`` is unset.
     """
 
     # Scores the full Squeez test split (outputs up to ~22k tokens) at 0.92 s
@@ -364,7 +364,7 @@ def lines_to_spans(content: str, probs: list[float], threshold: float) -> list[t
 
 
 def make_backend() -> SpanBackend:
-    """Build the backend named by ``$HEADROOM_SQUEEZ_BACKEND`` (default ``highlighter``).
+    """Build the backend named by ``$HEADROOM_WINNOW_BACKEND`` (default ``highlighter``).
 
     Constructing a backend loads nothing, so this is safe during discovery.
     """

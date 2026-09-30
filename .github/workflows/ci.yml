@@ -25,6 +25,6 @@ jobs:
           ruff check .
           ruff format --check .
       - name: Type-check
-        run: mypy headroom_squeez tests
+        run: mypy headroom_winnow tests
       - name: Test
         run: pytest

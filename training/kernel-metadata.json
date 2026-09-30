@@ -1,6 +1,6 @@
 {
-  "id": "deiupp/headroom-squeez-train-ettin32m",
-  "title": "headroom-squeez train ettin32m",
+  "id": "deiupp/headroom-winnow-train-ettin32m",
+  "title": "headroom-winnow train ettin32m",
   "code_file": "kaggle_train_pooled.ipynb",
   "language": "python",
   "kernel_type": "notebook",

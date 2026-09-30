@@ -6,9 +6,9 @@ import pytest
 from conftest import make_pytest_log
 from headroom.transforms.compressor_registry import CompressInput
 
-from headroom_squeez.backends import HighlighterBackend
-from headroom_squeez.compressor import SqueezCompressor
-from headroom_squeez.markers import MARKER_RE
+from headroom_winnow.backends import HighlighterBackend
+from headroom_winnow.compressor import WinnowCompressor
+from headroom_winnow.markers import MARKER_RE
 
 pytestmark = pytest.mark.slow
 
@@ -31,7 +31,7 @@ def test_spans_point_at_the_failure(backend: HighlighterBackend) -> None:
 
 def test_compressor_end_to_end_with_real_model(backend: HighlighterBackend) -> None:
     log = make_pytest_log(n_passed=200)
-    out = SqueezCompressor(backend).compress(
+    out = WinnowCompressor(backend).compress(
         CompressInput(
             content=log, content_type="text/x-log", query="why does test_login_redirect fail"
         )

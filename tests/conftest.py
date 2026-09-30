@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from headroom_squeez.backends import BackendUnavailableError
+from headroom_winnow.backends import BackendUnavailableError
 
 
 class FakeBackend:

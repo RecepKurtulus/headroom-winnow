@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 
-from headroom_squeez.markers import HASH_LENGTH, MARKER_RE, content_hash, format_marker
+from headroom_winnow.markers import HASH_LENGTH, MARKER_RE, content_hash, format_marker
 
 
 def test_hash_is_sha256_prefix_lowercase_hex() -> None:

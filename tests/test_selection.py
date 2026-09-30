@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from headroom_squeez.markers import MARKER_RE
-from headroom_squeez.selection import (
+from headroom_winnow.markers import MARKER_RE
+from headroom_winnow.selection import (
     expand_keep,
     lines_touched,
     mandatory_lines,
