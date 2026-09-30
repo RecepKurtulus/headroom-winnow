@@ -5,12 +5,12 @@ build-backend = "hatchling.build"
 [project]
 name = "headroom-squeez"
 version = "0.1.0"
-description = "Task-conditioned line pruning for Headroom, powered by the Squeez span model"
+description = "Task-aware pruning of coding-agent tool output for Headroom, powered by Squeez models"
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.10"
 authors = [
-    { name = "headroom-squeez contributors" }
+    { name = "Recep Kurtulus" }
 ]
 keywords = ["headroom", "squeez", "context", "compression", "llm", "agents"]
 classifiers = [
@@ -19,12 +19,18 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 dependencies = [
     # The external-compressor seam (compressor_registry + router dispatch) is
     # young; cap the minor so a contract change cannot silently break us.
     "headroom-ai>=0.39,<0.40",
 ]
+
+[project.urls]
+Homepage = "https://github.com/RecepKurtulus/headroom-squeez"
+Issues = "https://github.com/RecepKurtulus/headroom-squeez/issues"
+Benchmarks = "https://github.com/RecepKurtulus/headroom-squeez/blob/main/benchmarks/RESULTS.md"
 
 [project.optional-dependencies]
 # The span model. Kept optional so the package installs (and fails open) on

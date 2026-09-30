@@ -10,3 +10,8 @@ This product uses the Squeez approach and models by KRLabs
 (https://github.com/KRLabsOrg/squeez), licensed under the Apache License,
 Version 2.0, including the model KRLabsOrg/verbatim-rag-modern-bert-v2 and the
 dataset KRLabsOrg/tool-output-extraction-swebench.
+
+The pooled model distributed in this project's releases is fine-tuned from
+jhu-clsp/ettin-encoder-32m (https://huggingface.co/jhu-clsp/ettin-encoder-32m),
+licensed under the MIT License, on the dataset above using Squeez's training
+code.

@@ -1,97 +1,236 @@
 # headroom-squeez
 
-Task-conditioned line pruning for [Headroom](https://github.com/headroomlabs-ai/headroom),
-powered by the [Squeez](https://github.com/KRLabsOrg/squeez) span model.
+[![CI](https://github.com/RecepKurtulus/headroom-squeez/actions/workflows/ci.yml/badge.svg)](https://github.com/RecepKurtulus/headroom-squeez/actions/workflows/ci.yml)
+![Python](https://img.shields.io/badge/python-3.10%2B-blue)
+![License](https://img.shields.io/badge/license-Apache--2.0-green)
 
-Headroom already compresses agent tool output. This plugin replaces one piece
-of it: deciding which lines of a log, test run, grep result or diff the agent
-needs next. The decision comes from a model trained on real SWE-bench agent
-traces instead of lexical similarity. Dropped lines are never lost; each run
-becomes a `<<ccr:HASH N_lines_offloaded>>` marker the agent can retrieve.
+**Task-aware pruning of agent tool output for [Headroom](https://github.com/headroomlabs-ai/headroom).**
 
-> Status: pre-alpha. The v1 go/no-go gate is a benchmark against Headroom's
-> built-in `relevance_split` (see `benchmarks/`).
+Coding agents spend most of their context on tool output: test runs, builds,
+grep hits, logs. Usually only a handful of those lines matter for the agent's
+next step. `headroom-squeez` plugs a small model trained on real agent traces
+into Headroom's compression pipeline. It keeps the lines the task needs, never
+drops an error or a traceback, and turns everything else into retrievable
+markers.
 
-## Install
+> **41% fewer tokens with 0.85 gold-line recall, zero lost error lines, and
+> 0.29 s median latency on a consumer GPU.** At equal compression it keeps
+> 15-27 points more of the relevant lines than Headroom's built-in
+> `relevance_split`. [Full results →](benchmarks/RESULTS.md)
+
+---
+
+## Example
+
+The agent asks *"Find the build output block that reports the missing
+`GetObject` method in the `UserHandler` implementation of
+`storage.StorageService`"* and runs `go build ./...`:
+
+<table>
+<tr><th>Before: 119 lines, 1,838 tokens</th><th>After: 32 lines, 479 tokens (−74%)</th></tr>
+<tr><td>
+
+```text
+$ go build ./...
+# .../handlers/user_handler.go:23:12: cannot use h
+  (type *UserHandler) as type storage.StorageService:
+  *UserHandler does not implement storage.StorageService
+  (missing GetObject method)
+# .../handlers/order_handler.go:45:9: cannot use orderSvc ...
+# .../auth/auth.go:12:5: import cycle not allowed
+# .../permissions/perm.go:8:2: import cycle not allowed
+# .../api/v2/client.go:67:15: undefined: storage.ObjectMetadata
+# .../api/v2/client.go:88:20: cannot assign string literal ...
+# .../database/migration.go:33:10: cannot find module ...
+# .../cache/lru_test.go:78:5: race detector: data race
+Read at 0x00c0000a1230 by goroutine 9:
+  github.com/example/project/internal/cache.(*LRUCache).Get()
+      .../internal/cache/lru.go:44 +0x7c
+... 100 more lines of goroutine dumps,
+    unrelated packages and test output
+```
+
+</td><td>
+
+```text
+$ go build ./...
+# .../handlers/user_handler.go:23:12: cannot use h
+  (type *UserHandler) as type storage.StorageService:
+  *UserHandler does not implement storage.StorageService
+  (missing GetObject method)
+# .../handlers/order_handler.go:45:9: cannot use orderSvc ...
+# .../auth/auth.go:12:5: import cycle not allowed
+	imports github.com/example/project/internal/permissions
+<<ccr:e2e73bc3f2f290a77efc7426 52_lines_offloaded>>
+--- FAIL: TestUserHandler_Get (0.00s)
+    user_handler_test.go:45:
+        Error:        Not equal:
+                        expected: &storage.Object{...}
+                        actual  : <nil>
+FAIL
+exit status 1
+<<ccr:0bac82ae58f9e3ba08a67445 15_lines_offloaded>>
+--- FAIL: TestConcurrentAccess (0.01s)
+        panic: runtime error: invalid memory address ...
+FAIL
+exit status 1
+<<ccr:407242e9f3f948833f58dd56 23_lines_offloaded>>
+...
+```
+
+</td></tr>
+</table>
+
+The block the agent asked for is kept verbatim, every failure line survives,
+and each `<<ccr:…>>` marker can be expanded through Headroom's retrieval tool if
+the agent needs the dropped lines after all. (Real model output on an example
+from the Squeez test set; long paths and lines shortened to fit.)
+
+## How it works
+
+```mermaid
+flowchart LR
+    A[Agent tool call] --> B[Headroom proxy]
+    B --> C{Content router}
+    C -- "log / search / diff / text" --> D[SqueezCompressor]
+    C -- "JSON / code / HTML" --> E[Headroom built-ins]
+    D --> F[Span model<br/>which lines matter?]
+    F --> G[Safety rules<br/>errors, tracebacks,<br/>±2 context, edges]
+    G --> H[Render<br/>kept lines verbatim +<br/>ccr markers]
+    H --> I[(CCR store<br/>hash → original)]
+    H --> J[Pruned context to LLM]
+    D -. "no query / too short /<br/>too large / low savings" .-> E
+```
+
+1. **Gate.** Blocks without a task query, under 40 lines, over the device's token
+   budget, or where pruning would save less than 20% pass through untouched, so
+   Headroom's own compressors handle them.
+2. **Score.** A span model reads the task query and the whole output and marks
+   the lines that matter for the next step.
+3. **Protect.** Lines with errors, failures, exit codes, panics or pytest `E`
+   details are always kept, as are whole Python tracebacks, two neighbours of
+   every kept line, and the first and last two lines.
+4. **Render.** Kept lines stay byte-identical. Each dropped run becomes one
+   `<<ccr:HASH N_lines_offloaded>>` marker whose original text goes into the
+   CCR store. Hashes are deterministic, so identical input yields identical
+   output and prompt caches stay warm.
+
+The plugin never raises. Any failure (missing torch, model download error,
+inference error) falls back to Headroom's own path.
+
+## Installation
 
 ```bash
-pip install "headroom-squeez[model]"
+pip install "headroom-squeez[model] @ git+https://github.com/RecepKurtulus/headroom-squeez"
 ```
 
-Installing changes nothing. Opt in by name:
+Installing changes nothing until you opt in:
 
 ```python
-from headroom.transforms.content_router import ContentRouterConfig
+from headroom.transforms.content_router import ContentRouter, ContentRouterConfig
 
-ContentRouterConfig(active_external_compressors=["squeez"])
+router = ContentRouter(ContentRouterConfig(active_external_compressors=["squeez"]))
 ```
 
-or `--compressor squeez` on the Headroom proxy.
+or start the proxy with `--compressor squeez`.
 
-Runs locally on CPU. No API key, GPU or cloud account.
+### Choosing a model
 
-## What it keeps
+| Backend | Model | Size | When to use |
+|---|---|---|---|
+| `pooled` (recommended) | 32M line classifier trained with [`training/`](training/) | 121 MB | Fast enough to score any output on a GPU |
+| `highlighter` (default) | [`KRLabsOrg/verbatim-rag-modern-bert-v2`](https://huggingface.co/KRLabsOrg/verbatim-rag-modern-bert-v2) | 600 MB | Works out of the box, downloaded from the Hub; limited to short outputs |
 
-- Every line the model marks as relevant to the task.
-- Always: error, failure, traceback, panic, exception, exit code and fatal
-  lines, whole Python tracebacks and pytest `E` lines.
-- Two neighbours on each side of every kept line.
-- The first and last two lines.
+To use the pooled model, download `squeez_pooled_ettin32m.zip` from the
+[latest release](https://github.com/RecepKurtulus/headroom-squeez/releases),
+unzip it, and point the plugin at it:
 
-It passes through unchanged when there is no task query, the output is under
-40 lines, the output is larger than the model can score in time on this machine
-(`HEADROOM_SQUEEZ_MAX_TOKENS`), the model found nothing, or the saving is under
-20%. It never raises. If the model can't load, it logs one warning and
-Headroom's own path takes over.
+```bash
+export HEADROOM_SQUEEZ_BACKEND=pooled
+export HEADROOM_SQUEEZ_MODEL=/path/to/squeez_pooled_ettin32m
+```
 
-## Speed
+### Configuration
 
-The model has to see the whole output at once: cutting it into smaller windows
-made it 20x faster but halved recall. So instead of shrinking the window, the
-plugin only scores outputs it can finish quickly and leaves larger ones to
-Headroom. Measured forward time (float32):
-
-| Tokens | GTX 1650 Ti | 4-core laptop CPU |
+| Variable | Default | Meaning |
 |---|---|---|
-| 512 | 70 ms | 660 ms |
-| 2048 | 490 ms | 3.7 s |
-| 8192 | 4.2 s | 31 s |
+| `HEADROOM_SQUEEZ_BACKEND` | `highlighter` | `highlighter` or `pooled` |
+| `HEADROOM_SQUEEZ_MODEL` | `KRLabsOrg/verbatim-rag-modern-bert-v2` | Hub id or local path; required for `pooled` |
+| `HEADROOM_SQUEEZ_REVISION` | pinned commit of the default model | Model revision |
+| `HEADROOM_SQUEEZ_DEVICE` | `auto` | `auto` (CUDA if available), `cuda` or `cpu` |
+| `HEADROOM_SQUEEZ_DTYPE` | `float32` | `float16` is faster only on GPUs with tensor cores |
+| `HEADROOM_SQUEEZ_MAX_TOKENS` | per backend and device | Largest output the model scores; larger ones go to Headroom |
 
-A GPU is strongly recommended; on CPU the plugin only handles short outputs.
-A smaller model trained with `training/` is the way to raise these limits.
+A GPU is strongly recommended. On CPU the plugin only scores short outputs.
 
-## Configuration
+## Results
 
-| Variable | Default |
-|---|---|
-| `HEADROOM_SQUEEZ_BACKEND` | `highlighter` (or `pooled` for a Squeez pooled line classifier, see `training/`) |
-| `HEADROOM_SQUEEZ_MODEL` | `KRLabsOrg/verbatim-rag-modern-bert-v2`; required for `pooled` |
-| `HEADROOM_SQUEEZ_REVISION` | pinned commit of the default model |
-| `HEADROOM_SQUEEZ_DEVICE` | `auto` (CUDA if available, else CPU) |
-| `HEADROOM_SQUEEZ_DTYPE` | `float32` |
-| `HEADROOM_SQUEEZ_MAX_TOKENS` | 2048 on GPU, 512 on CPU |
+On the 618-example test split of the Squeez dataset:
 
-## Known limitations
+| Method | Recall | Token reduction | Error lines lost | p50 latency |
+|---|---|---|---|---|
+| Headroom `relevance_split` (BM25) | 0.725 | 58.6%¹ | 7,953 | 1 ms |
+| Headroom `relevance_split` (hybrid) | 0.753 | 57.6%¹ | 7,771 | 2.2 s |
+| **headroom-squeez (32M pooled)** | **0.847** | **41.4%** | **0** | **0.29 s** |
 
-Headroom 0.39.1 ignores `compressed=False`: when this plugin declines a block
-(no query, too short, model unavailable, ...) the router still adopts the
-unchanged block and skips its own compressors for it. The one-line fix is in
-`upstream/router-respect-passthrough.patch`; until it lands, the
-`test_router_falls_back_when_backend_unavailable` test is a strict `xfail`.
+¹ Upper bound: the dropped tail is Kompressed inside Headroom, not removed.
 
-Headroom runs its lossless fold (and, for logs and search results, its
-`relevance_split`) *before* the external-compressor hook, and returns early
-when either succeeds. Such blocks never reach this plugin today. See
-`tests/test_router.py::test_known_gap_lossless_fold_preempts_external`.
+At equal compression (50 / 70 / 90% of lines dropped) the pooled model keeps
+0.89 / 0.84 / 0.68 of the gold lines, against 0.73 / 0.63 / 0.46 for
+`relevance_split`. Details, the 150M highlighter numbers and reproduction
+commands are in [`benchmarks/RESULTS.md`](benchmarks/RESULTS.md).
+
+## Training your own model
+
+[`training/kaggle_train_pooled.ipynb`](training/kaggle_train_pooled.ipynb)
+trains the 32M pooled classifier on a free Kaggle T4 in about six hours. It
+uses [Squeez](https://github.com/KRLabsOrg/squeez)'s own training code at a
+pinned commit and evaluates on the same test split as the benchmark. Swap
+`--base-model` to try other encoders.
+
+## Project layout
+
+```
+headroom_squeez/
+  compressor.py    SqueezCompressor: the headroom.compressor contract, gates, fail-open
+  selection.py     spans → lines, safety rules, rendering with markers
+  markers.py       CCR marker format and deterministic hashes
+  backends.py      highlighter and pooled backends: lazy, pinned, device-aware
+benchmarks/        compare.py and RESULTS.md
+training/          Kaggle notebook for the pooled model
+upstream/          patch proposed to Headroom (see below)
+tests/             unit tests with a fake model, router end-to-end, real-model tests
+```
+
+## Limitations
+
+- **Headroom's lossless fold runs first.** Headroom applies its byte-exact fold
+  (and, for logs and search results, `relevance_split`) before the external
+  compressor hook and returns early when either succeeds, so such blocks never
+  reach this plugin. See `tests/test_router.py::test_known_gap_lossless_fold_preempts_external`.
+- **Passthroughs skip Headroom's compressors in 0.39.1.** When the plugin
+  declines a block, the router still adopts the unchanged block. The one-line
+  fix is in [`upstream/router-respect-passthrough.patch`](upstream/router-respect-passthrough.patch);
+  the matching test is a strict `xfail` until it lands.
 
 ## Development
 
 ```bash
-pip install -e ".[dev]"
-ruff check . && ruff format --check . && mypy headroom_squeez && pytest
-pytest -m slow   # loads the real model
+pip install -e ".[dev,model]"
+ruff check . && ruff format --check . && mypy headroom_squeez tests benchmarks
+pytest               # fast tests, no downloads
+pytest -m slow       # downloads and runs the real highlighter
 ```
+
+## Acknowledgements
+
+- [Headroom](https://github.com/headroomlabs-ai/headroom) for the proxy, CCR
+  store and the external compressor contract this plugin implements.
+- [Squeez](https://github.com/KRLabsOrg/squeez) by KRLabs for the task-conditioned
+  pruning approach, the training code, the highlighter model and the dataset.
+- [Ettin](https://huggingface.co/jhu-clsp/ettin-encoder-32m) for the 32M encoder
+  the pooled model is fine-tuned from.
 
 ## License
 
-Apache-2.0. See `NOTICE` for attributions.
+Apache-2.0. See [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE).

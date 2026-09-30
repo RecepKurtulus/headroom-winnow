@@ -5,8 +5,6 @@ from __future__ import annotations
 import pytest
 
 from headroom_squeez.backends import (
-    CPU_TOKEN_BUDGET,
-    CUDA_TOKEN_BUDGET,
     DEFAULT_MODEL,
     DEFAULT_REVISION,
     HighlighterBackend,
@@ -33,10 +31,17 @@ def test_custom_model_without_revision_is_unpinned() -> None:
 
 
 @pytest.mark.parametrize(
-    ("device", "budget"), [("cpu", CPU_TOKEN_BUDGET), ("cuda", CUDA_TOKEN_BUDGET)]
+    ("backend", "device", "budget"),
+    [
+        (HighlighterBackend, "cpu", 512),
+        (HighlighterBackend, "cuda", 2048),
+        (PooledBackend, "cpu", 2048),
+        (PooledBackend, "cuda", 32768),
+    ],
 )
-def test_budget_follows_device(device: str, budget: int) -> None:
-    assert HighlighterBackend(device=device).max_input_tokens == budget
+def test_budget_follows_backend_and_device(backend: type, device: str, budget: int) -> None:
+    kwargs = {"model_id": "some/dir"} if backend is PooledBackend else {}
+    assert backend(device=device, **kwargs).max_input_tokens == budget
 
 
 def test_budget_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -44,7 +49,7 @@ def test_budget_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
     assert HighlighterBackend(device="cpu").max_input_tokens == 4096
     assert HighlighterBackend(device="cpu", max_input_tokens=100).max_input_tokens == 100
     monkeypatch.setenv("HEADROOM_SQUEEZ_MAX_TOKENS", "lots")
-    assert HighlighterBackend(device="cpu").max_input_tokens == CPU_TOKEN_BUDGET
+    assert HighlighterBackend(device="cpu").max_input_tokens == 512
 
 
 def test_env_configures_backend(monkeypatch: pytest.MonkeyPatch) -> None:

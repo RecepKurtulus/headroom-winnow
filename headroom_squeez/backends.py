@@ -36,16 +36,13 @@ compression falls from 0.78 (8192) to 0.47 (2048) and 0.31 (512), because the
 model needs the whole output in view.
 
 What bounds latency instead is ``max_input_tokens``: the largest input a
-backend can score within the latency budget on its device. Measured highlighter
-forward times (fp32, ModernBERT-base):
-
-    tokens      GTX 1650 Ti     4-core laptop CPU
-    512         70 ms           660 ms
-    2048        490 ms          3.7 s
-    8192        4.2 s           31 s
-
-so the defaults are :data:`CUDA_TOKEN_BUDGET` and :data:`CPU_TOKEN_BUDGET`.
-The compressor passes anything larger straight to Headroom's own path.
+backend can score within the latency budget on its device. Each backend class
+carries its own GPU and CPU budgets, sized from measured forward times. The
+150M highlighter needs ~0.5 s for 2,048 tokens on a consumer GPU and ~4 s for
+8,192, so it stays small; the 32M pooled classifier scores the whole Squeez test
+split at 0.29 s p50 / 0.92 s p95 on the same GPU, so its GPU budget covers
+practically any tool output. The compressor passes anything larger straight to
+Headroom's own path.
 """
 
 from __future__ import annotations
@@ -58,8 +55,6 @@ from typing import Any, Protocol, runtime_checkable
 log = logging.getLogger(__name__)
 
 __all__ = [
-    "CPU_TOKEN_BUDGET",
-    "CUDA_TOKEN_BUDGET",
     "DEFAULT_MODEL",
     "DEFAULT_REVISION",
     "BackendUnavailableError",
@@ -80,11 +75,6 @@ _ENV_REVISION = "HEADROOM_SQUEEZ_REVISION"
 _ENV_DEVICE = "HEADROOM_SQUEEZ_DEVICE"
 _ENV_DTYPE = "HEADROOM_SQUEEZ_DTYPE"
 _ENV_MAX_TOKENS = "HEADROOM_SQUEEZ_MAX_TOKENS"
-
-#: Largest input scored on a GPU (~0.5 s on a GTX 1650 Ti).
-CUDA_TOKEN_BUDGET = 2048
-#: Largest input scored on CPU (~0.7 s on a 4-core laptop).
-CPU_TOKEN_BUDGET = 512
 
 
 class BackendUnavailableError(RuntimeError):
@@ -107,9 +97,15 @@ class SpanBackend(Protocol):
 class _TransformersBackend:
     """Shared plumbing: lazy load, device/dtype resolution, token budget.
 
-    Subclasses say how the model is loaded (:meth:`_load_model`) and how its
-    output becomes spans (``find_spans``).
+    Subclasses say how the model is loaded (:meth:`_load_model`), how its
+    output becomes spans (``find_spans``), and how many tokens it can score in
+    time on each kind of device.
     """
+
+    #: Largest input scored on a GPU by default.
+    cuda_token_budget = 2048
+    #: Largest input scored on CPU by default.
+    cpu_token_budget = 512
 
     def __init__(
         self,
@@ -150,7 +146,11 @@ class _TransformersBackend:
                 return int(env)
             except ValueError:
                 log.warning("ignoring non-integer %s=%r", _ENV_MAX_TOKENS, env)
-        return CUDA_TOKEN_BUDGET if self.resolved_device().startswith("cuda") else CPU_TOKEN_BUDGET
+        return (
+            self.cuda_token_budget
+            if self.resolved_device().startswith("cuda")
+            else self.cpu_token_budget
+        )
 
     def _load_model(self, dtype: Any) -> Any:
         """Load and return the model on CPU; the caller moves it to the device."""
@@ -200,9 +200,14 @@ class HighlighterBackend(_TransformersBackend):
         max_length: Token window per forward pass.
         doc_stride: Token overlap between consecutive windows.
         max_input_tokens: Largest input to score. Defaults to
-            ``$HEADROOM_SQUEEZ_MAX_TOKENS``, else :data:`CUDA_TOKEN_BUDGET` or
-            :data:`CPU_TOKEN_BUDGET` for the resolved device.
+            ``$HEADROOM_SQUEEZ_MAX_TOKENS``, else :attr:`cuda_token_budget` or
+            :attr:`cpu_token_budget` for the resolved device.
     """
+
+    # ~0.5 s for 2,048 tokens on a consumer GPU; attention cost grows fast
+    # beyond that because the model needs the whole output in one window.
+    cuda_token_budget = 2048
+    cpu_token_budget = 512
 
     def __init__(
         self,
@@ -283,6 +288,11 @@ class PooledBackend(_TransformersBackend):
     Raises:
         ValueError: If no model is given and ``$HEADROOM_SQUEEZ_MODEL`` is unset.
     """
+
+    # Scores the full Squeez test split (outputs up to ~22k tokens) at 0.92 s
+    # p95 on a consumer GPU, so the GPU budget is effectively "everything".
+    cuda_token_budget = 32768
+    cpu_token_budget = 2048
 
     def __init__(
         self,
