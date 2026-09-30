@@ -41,7 +41,8 @@ Runs locally on CPU. No API key, GPU or cloud account.
 It passes through unchanged when there is no task query, the output is under
 40 lines, the output is larger than the model can score in time on this machine
 (`HEADROOM_SQUEEZ_MAX_TOKENS`), the model found nothing, or the saving is under
-20%.
+20%. It never raises. If the model can't load, it logs one warning and
+Headroom's own path takes over.
 
 ## Speed
 
@@ -56,8 +57,8 @@ Headroom. Measured forward time (float32):
 | 2048 | 490 ms | 3.7 s |
 | 8192 | 4.2 s | 31 s |
 
-A GPU is strongly recommended; on CPU the plugin only handles short outputs. It never raises.
-If the model can't load, it logs one warning and Headroom's own path takes over.
+A GPU is strongly recommended; on CPU the plugin only handles short outputs.
+A smaller model trained with `training/` is the way to raise these limits.
 
 ## Configuration
 
