@@ -1,0 +1,32 @@
+$ go build ./...
+# github.com/example/project/internal/handlers/user_handler.go:23:12: cannot use h (type *UserHandler) as type storage.StorageService in assignment:
+	*UserHandler does not implement storage.StorageService (missing GetObject method)
+# github.com/example/project/internal/handlers/order_handler.go:45:9: cannot use orderSvc (type *order.Service) as type storage.StorageService in argument to NewOrderProcessor:
+	*order.Service does not implement storage.StorageService (missing DeleteObject method)
+# github.com/example/project/internal/auth/auth.go:12:5: import cycle not allowed
+	imports github.com/example/project/internal/permissions
+<<ccr:e2e73bc3f2f290a77efc7426 52_lines_offloaded>>
+--- FAIL: TestUserHandler_Get (0.00s)
+    user_handler_test.go:45: 
+        Error:        Not equal: 
+                        expected: &storage.Object{ID:"obj-123", Size:1024}
+                        actual  : <nil>
+        Test:         TestUserHandler_Get
+FAIL
+exit status 1
+FAIL    github.com/example/project/internal/handlers   0.012s
+
+<<ccr:0bac82ae58f9e3ba08a67445 15_lines_offloaded>>
+--- FAIL: TestConcurrentAccess (0.01s)
+    lru_test.go:92: 
+        panic: runtime error: invalid memory address or nil pointer dereference
+FAIL
+exit status 1
+FAIL    github.com/example/project/internal/cache   0.014s
+
+<<ccr:407242e9f3f948833f58dd56 23_lines_offloaded>>
+	imports github.com/example/project/internal/metrics
+# github.com/example/project/internal/handlers/order_handler.go:45:9: cannot use orderSvc (type *order.Service) as type storage.StorageService in argument to NewOrderProcessor:
+	*order.Service does not implement storage.StorageService (missing DeleteObject method)
+# github.com/example/project/internal/api/v1/router.go:27:22: cannot use nil as type http.HandlerFunc in argument to http.HandleFunc
+# github.com/example/project/internal/api/v1/router.go:40:15: undefined: auth.NewAuthenticator

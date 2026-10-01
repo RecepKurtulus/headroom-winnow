@@ -1,0 +1,6 @@
+{
+  "query": "Find the build_output block that reports the missing GetObject method in the UserHandler implementation of storage.StorageService",
+  "tokens_before": 1838,
+  "tokens_after": 479,
+  "source": "KRLabsOrg/tool-output-extraction-swebench test[545] (Apache-2.0)"
+}

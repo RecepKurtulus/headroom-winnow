@@ -56,6 +56,9 @@ squeez = "headroom_winnow.compressor:WinnowCompressor"
 [tool.hatch.build.targets.wheel]
 packages = ["headroom_winnow"]
 
+[tool.hatch.build.targets.sdist]
+include = ["headroom_winnow", "tests", "README.md", "LICENSE", "NOTICE", "pyproject.toml"]
+
 [tool.ruff]
 target-version = "py310"
 line-length = 100

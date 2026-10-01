@@ -1,0 +1,119 @@
+$ go build ./...
+# github.com/example/project/internal/handlers/user_handler.go:23:12: cannot use h (type *UserHandler) as type storage.StorageService in assignment:
+	*UserHandler does not implement storage.StorageService (missing GetObject method)
+# github.com/example/project/internal/handlers/order_handler.go:45:9: cannot use orderSvc (type *order.Service) as type storage.StorageService in argument to NewOrderProcessor:
+	*order.Service does not implement storage.StorageService (missing DeleteObject method)
+# github.com/example/project/internal/auth/auth.go:12:5: import cycle not allowed
+	imports github.com/example/project/internal/permissions
+	imports github.com/example/project/internal/auth
+# github.com/example/project/internal/permissions/perm.go:8:2: import cycle not allowed
+	imports github.com/example/project/internal/auth
+	imports github.com/example/project/internal/permissions
+# github.com/example/project/internal/api/v2/client.go:67:15: undefined: storage.ObjectMetadata
+# github.com/example/project/internal/api/v2/client.go:88:20: cannot assign string literal to type int32
+# github.com/example/project/internal/api/v2/client.go:102:5: mismatched types int and string
+# github.com/example/project/internal/database/migration.go:33:10: cannot find module providing package golang.org/x/crypto v0.0.0-20230101000000-abcdef123456
+		requires golang.org/x/crypto v0.0.0-20230101000000-abcdef123456
+		go.mod file: github.com/example/project v0.0.0-20240315000000-1234567890ab
+# github.com/example/project/internal/cache/lru_test.go:78:5: race detector: data race
+Read at 0x00c0000a1230 by goroutine 9:
+  github.com/example/project/internal/cache.(*LRUCache).Get()
+      /home/dev/go/src/github.com/example/project/internal/cache/lru.go:44 +0x7c
+  github.com/example/project/internal/cache.TestConcurrentAccess.func1()
+      /home/dev/go/src/github.com/example/project/internal/cache/lru_test.go:78 +0x64
+
+Previous write at 0x00c0000a1230 by goroutine 7:
+  github.com/example/project/internal/cache.(*LRUCache).Set()
+      /home/dev/go/src/github.com/example/project/internal/cache/lru.go:61 +0x134
+  github.com/example/project/internal/cache.TestConcurrentAccess.func2()
+      /home/dev/go/src/github.com/example/project/internal/cache/lru_test.go:84 +0x88
+
+# github.com/example/project/internal/session/manager_test.go:112:12: race detector: data race
+Read at 0x00c0000b5678 by goroutine 14:
+  github.com/example/project/internal/session.(*Manager).Get()
+      /home/dev/go/src/github.com/example/project/internal/session/manager.go:120 +0x9a
+  github.com/example/project/internal/session.TestSessionConcurrency.func1()
+      /home/dev/go/src/github.com/example/project/internal/session/manager_test.go:112 +0x5b
+
+Previous write at 0x00c0000b5678 by goroutine 13:
+  github.com/example/project/internal/session.(*Manager).Set()
+      /home/dev/go/src/github.com/example/project/internal/session/manager.go:135 +0xb3
+  github.com/example/project/internal/session.TestSessionConcurrency.func2()
+      /home/dev/go/src/github.com/example/project/internal/session/manager_test.go:119 +0x71
+
+# github.com/example/project/internal/api/v1/router.go:27:22: cannot use nil as type http.HandlerFunc in argument to http.HandleFunc
+# github.com/example/project/internal/api/v1/router.go:40:15: undefined: auth.NewAuthenticator
+# github.com/example/project/cmd/server/main.go:15:2: cannot find module providing package github.com/example/project/internal/metrics v0.0.0-20240215000000-deadbeefcafe
+		requires github.com/example/project/internal/metrics v0.0.0-20240215000000-deadbeefcafe
+		go.mod file: github.com/example/project v0.0.0-20240315000000-1234567890ab
+# github.com/example/project/internal/config/config.go:55:9: import cycle not allowed
+	imports github.com/example/project/internal/logger
+	imports github.com/example/project/internal/config
+# github.com/example/project/internal/logger/logger.go:20:5: import cycle not allowed
+	imports github.com/example/project/internal/config
+	imports github.com/example/project/internal/logger
+
+$ go test -run TestUserHandler ./internal/handlers -v
+=== RUN   TestUserHandler_Create
+--- PASS: TestUserHandler_Create (0.00s)
+=== RUN   TestUserHandler_Get
+--- FAIL: TestUserHandler_Get (0.00s)
+    user_handler_test.go:45: 
+        Error:        Not equal: 
+                        expected: &storage.Object{ID:"obj-123", Size:1024}
+                        actual  : <nil>
+        Test:         TestUserHandler_Get
+FAIL
+exit status 1
+FAIL    github.com/example/project/internal/handlers   0.012s
+
+$ go test -race ./internal/cache -run TestConcurrentAccess -count=1
+==================
+WARNING: DATA RACE
+Read at 0x00c0000a1230 by goroutine 9:
+  github.com/example/project/internal/cache.(*LRUCache).Get()
+      /home/dev/go/src/github.com/example/project/internal/cache/lru.go:44 +0x7c
+  github.com/example/project/internal/cache.TestConcurrentAccess.func1()
+      /home/dev/go/src/github.com/example/project/internal/cache/lru_test.go:78 +0x64
+
+Previous write at 0x00c0000a1230 by goroutine 7:
+  github.com/example/project/internal/cache.(*LRUCache).Set()
+      /home/dev/go/src/github.com/example/project/internal/cache/lru.go:61 +0x134
+  github.com/example/project/internal/cache.TestConcurrentAccess.func2()
+      /home/dev/go/src/github.com/example/project/internal/cache/lru_test.go:84 +0x88
+==================
+--- FAIL: TestConcurrentAccess (0.01s)
+    lru_test.go:92: 
+        panic: runtime error: invalid memory address or nil pointer dereference
+FAIL
+exit status 1
+FAIL    github.com/example/project/internal/cache   0.014s
+
+$ go vet ./...
+# github.com/example/project/internal/api/v2/client.go:67:15: undefined: storage.ObjectMetadata
+# github.com/example/project/internal/handlers/order_handler.go:45:9: mismatched types storage.StorageService and *order.Service
+# github.com/example/project/internal/auth/auth.go:12:5: import cycle not allowed
+# github.com/example/project/internal/config/config.go:55:9: import cycle not allowed
+
+$ go list -m all
+github.com/example/project v0.0.0-20240315000000-1234567890ab
+golang.org/x/net v0.0.0-20231201123456-abcdef123456
+golang.org/x/crypto v0.0.0-20230101000000-abcdef123456 // missing
+github.com/sirupsen/logrus v1.9.0
+github.com/google/uuid v1.3.0
+github.com/stretchr/testify v1.8.1
+
+$ go mod tidy
+go: finding module for package golang.org/x/crypto v0.0.0-20230101000000-abcdef123456
+go: downloading golang.org/x/crypto v0.0.0-20230101000000-abcdef123456
+go: github.com/example/project@v0.0.0-20240315000000-1234567890ab requires
+        golang.org/x/crypto v0.0.0-20230101000000-abcdef123456: invalid version: unknown revision
+
+$ go build ./cmd/server
+# github.com/example/project/internal/metrics/collector.go:12:2: import cycle not allowed
+	imports github.com/example/project/internal/handlers
+	imports github.com/example/project/internal/metrics
+# github.com/example/project/internal/handlers/order_handler.go:45:9: cannot use orderSvc (type *order.Service) as type storage.StorageService in argument to NewOrderProcessor:
+	*order.Service does not implement storage.StorageService (missing DeleteObject method)
+# github.com/example/project/internal/api/v1/router.go:27:22: cannot use nil as type http.HandlerFunc in argument to http.HandleFunc
+# github.com/example/project/internal/api/v1/router.go:40:15: undefined: auth.NewAuthenticator

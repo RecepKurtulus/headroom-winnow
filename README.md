@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/logo.png" width="112" alt="Winnow logo">
+  <img src="https://raw.githubusercontent.com/RecepKurtulus/headroom-winnow/main/docs/assets/logo.png" width="112" alt="Winnow logo">
 </p>
 
 <h1 align="center">Winnow</h1>
@@ -23,10 +23,12 @@ into Headroom's compression pipeline. It keeps the lines the task needs, never
 drops an error or a traceback, and turns everything else into retrievable
 markers.
 
+<p align="center"><img src="https://raw.githubusercontent.com/RecepKurtulus/headroom-winnow/main/docs/assets/demo.gif" width="760" alt="Winnow pruning a go build output from 1,838 to 479 tokens"></p>
+
 > **41% fewer tokens with 0.85 gold-line recall, zero lost error lines, and
 > 0.29 s median latency on a consumer GPU.** At equal compression it keeps
 > 15-27 points more of the relevant lines than Headroom's built-in
-> `relevance_split`. [Full results →](benchmarks/RESULTS.md)
+> `relevance_split`. [Full results →](https://github.com/RecepKurtulus/headroom-winnow/blob/main/benchmarks/RESULTS.md)
 
 ---
 
@@ -148,7 +150,7 @@ or start the proxy with `--compressor winnow`.
 
 | Backend | Model | Size | When to use |
 |---|---|---|---|
-| `pooled` (recommended) | 32M line classifier trained with [`training/`](training/) | 121 MB | Fast enough to score any output on a GPU |
+| `pooled` (recommended) | 32M line classifier trained with [`training/`](https://github.com/RecepKurtulus/headroom-winnow/tree/main/training/) | 121 MB | Fast enough to score any output on a GPU |
 | `highlighter` (default) | [`KRLabsOrg/verbatim-rag-modern-bert-v2`](https://huggingface.co/KRLabsOrg/verbatim-rag-modern-bert-v2) | 600 MB | Works out of the box, downloaded from the Hub; limited to short outputs |
 
 To use the pooled model, download `squeez_pooled_ettin32m.zip` from the
@@ -188,11 +190,11 @@ On the 618-example test split of the Squeez dataset:
 At equal compression (50 / 70 / 90% of lines dropped) the pooled model keeps
 0.89 / 0.84 / 0.68 of the gold lines, against 0.73 / 0.63 / 0.46 for
 `relevance_split`. Details, the 150M highlighter numbers and reproduction
-commands are in [`benchmarks/RESULTS.md`](benchmarks/RESULTS.md).
+commands are in [`benchmarks/RESULTS.md`](https://github.com/RecepKurtulus/headroom-winnow/blob/main/benchmarks/RESULTS.md).
 
 ## Training your own model
 
-[`training/kaggle_train_pooled.ipynb`](training/kaggle_train_pooled.ipynb)
+[`training/kaggle_train_pooled.ipynb`](https://github.com/RecepKurtulus/headroom-winnow/blob/main/training/kaggle_train_pooled.ipynb)
 trains the 32M pooled classifier on a free Kaggle T4 in about six hours. It
 uses [Squeez](https://github.com/KRLabsOrg/squeez)'s own training code at a
 pinned commit and evaluates on the same test split as the benchmark. Swap
@@ -220,7 +222,7 @@ tests/             unit tests with a fake model, router end-to-end, real-model t
   reach this plugin. See `tests/test_router.py::test_known_gap_lossless_fold_preempts_external`.
 - **Passthroughs skip Headroom's compressors in 0.39.1.** When the plugin
   declines a block, the router still adopts the unchanged block. The one-line
-  fix is in [`upstream/router-respect-passthrough.patch`](upstream/router-respect-passthrough.patch);
+  fix is in [`upstream/router-respect-passthrough.patch`](https://github.com/RecepKurtulus/headroom-winnow/blob/main/upstream/router-respect-passthrough.patch);
   the matching test is a strict `xfail` until it lands.
 
 ## Development
@@ -243,4 +245,4 @@ pytest -m slow       # downloads and runs the real highlighter
 
 ## License
 
-Apache-2.0. See [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE).
+Apache-2.0. See [`LICENSE`](https://github.com/RecepKurtulus/headroom-winnow/blob/main/LICENSE) and [`NOTICE`](https://github.com/RecepKurtulus/headroom-winnow/blob/main/NOTICE).
