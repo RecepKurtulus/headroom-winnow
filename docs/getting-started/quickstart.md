@@ -6,9 +6,6 @@ through external compressors you select by name.
 === "Headroom proxy"
 
     ```bash
-    export HEADROOM_WINNOW_BACKEND=pooled
-    export HEADROOM_WINNOW_MODEL=/path/to/squeez_pooled_ettin32m
-
     headroom proxy --compressor winnow
     ```
 
@@ -35,9 +32,9 @@ through external compressors you select by name.
 
     ```python
     from headroom.transforms.compressor_registry import CompressInput
-    from headroom_winnow import PooledBackend, WinnowCompressor
+    from headroom_winnow import WinnowCompressor
 
-    winnow = WinnowCompressor(PooledBackend("/path/to/squeez_pooled_ettin32m"))
+    winnow = WinnowCompressor()  # downloads rbk4209/winnow-pooled-32m on first use
     out = winnow.compress(
         CompressInput(
             content=open("build.log").read(),

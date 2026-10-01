@@ -5,11 +5,11 @@ Winnow can run two kinds of models. Both come from the
 on the same data: tool outputs from SWE-bench agent runs, labelled with the
 lines the agent actually needed.
 
-| | `pooled` (recommended) | `highlighter` |
+| | `pooled` (default) | `highlighter` |
 |---|---|---|
 | Model | 32M line classifier, fine-tuned from [`jhu-clsp/ettin-encoder-32m`](https://huggingface.co/jhu-clsp/ettin-encoder-32m) | [`KRLabsOrg/verbatim-rag-modern-bert-v2`](https://huggingface.co/KRLabsOrg/verbatim-rag-modern-bert-v2), 150M span model |
 | Output | a probability per line | character spans |
-| Where to get it | [GitHub release](https://github.com/RecepKurtulus/headroom-winnow/releases/latest) (121 MB) | downloaded from the Hub on first use |
+| Where to get it | [`rbk4209/winnow-pooled-32m`](https://huggingface.co/rbk4209/winnow-pooled-32m) on the Hub (128 MB) | downloaded from the Hub on first use |
 | Median latency¹ | **0.29 s** | 1.5 s |
 | p95 latency¹ | **0.92 s** | 9.0 s |
 | Recall as shipped¹ | 0.847 | 0.836 |
@@ -24,16 +24,21 @@ separator token between lines, and mean-pools each line's tokens into a
 relevance score. It was trained for this project with
 [`training/kaggle_train_pooled.ipynb`](training.md) and matches the
 highlighter's recall at a fraction of its cost, which lets Winnow score
-practically every tool output on a GPU instead of only small ones.
+practically every tool output on a GPU instead of only small ones. It is the
+default: nothing needs to be configured. To use your own pooled model:
 
 ```bash
-export HEADROOM_WINNOW_BACKEND=pooled
-export HEADROOM_WINNOW_MODEL=/path/to/squeez_pooled_ettin32m
+export HEADROOM_WINNOW_MODEL=/path/to/your/pooled-model
 ```
 
 ## Highlighter
 
-The default when nothing is configured, because it needs no manual download.
+Squeez's original extractive model. Select it with:
+
+```bash
+export HEADROOM_WINNOW_BACKEND=highlighter
+```
+
 Loading is pinned to a reviewed commit (weights and tokenizer) because the model
 runs its own code via `trust_remote_code`. Its latency grows quickly with input
 length, so its default budget is 2,048 tokens on a GPU.

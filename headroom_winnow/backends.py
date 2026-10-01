@@ -8,11 +8,11 @@ fake backend and lets models be swapped without touching the compressor.
 Two backends ship, selected by ``$HEADROOM_WINNOW_BACKEND`` (see
 :func:`make_backend`):
 
-  * :class:`HighlighterBackend` (default) wraps
-    ``KRLabsOrg/verbatim-rag-modern-bert-v2``, the ~150M ModernBERT span model
-    Squeez itself uses for its extractive path.
-  * :class:`PooledBackend` loads a Squeez *pooled* line classifier, which can
-    be trained on a much smaller encoder (``training/``).
+  * :class:`PooledBackend` (default) loads a Squeez *pooled* line classifier.
+    The default model, ``rbk4209/winnow-pooled-32m``, is a 32M encoder trained
+    for this project (``training/``).
+  * :class:`HighlighterBackend` wraps ``KRLabsOrg/verbatim-rag-modern-bert-v2``,
+    the ~150M ModernBERT span model Squeez itself uses for its extractive path.
 
 Three rules shape both:
 
@@ -55,8 +55,10 @@ from typing import Any, Protocol, runtime_checkable
 log = logging.getLogger(__name__)
 
 __all__ = [
-    "DEFAULT_MODEL",
-    "DEFAULT_REVISION",
+    "DEFAULT_HIGHLIGHTER_MODEL",
+    "DEFAULT_HIGHLIGHTER_REVISION",
+    "DEFAULT_POOLED_MODEL",
+    "DEFAULT_POOLED_REVISION",
     "BackendUnavailableError",
     "HighlighterBackend",
     "PooledBackend",
@@ -65,9 +67,13 @@ __all__ = [
     "make_backend",
 ]
 
-DEFAULT_MODEL = "KRLabsOrg/verbatim-rag-modern-bert-v2"
-#: Commit of :data:`DEFAULT_MODEL` whose weights and remote code we reviewed.
-DEFAULT_REVISION = "6a967332efedfe5aca9b85b8310cc68d9ac6f881"
+DEFAULT_POOLED_MODEL = "rbk4209/winnow-pooled-32m"
+#: Commit of :data:`DEFAULT_POOLED_MODEL` published with this release.
+DEFAULT_POOLED_REVISION = "bc958885c032967dc160f8fc6c055ef570db7ec4"
+
+DEFAULT_HIGHLIGHTER_MODEL = "KRLabsOrg/verbatim-rag-modern-bert-v2"
+#: Commit of :data:`DEFAULT_HIGHLIGHTER_MODEL` whose weights and remote code we reviewed.
+DEFAULT_HIGHLIGHTER_REVISION = "6a967332efedfe5aca9b85b8310cc68d9ac6f881"
 
 _ENV_BACKEND = "HEADROOM_WINNOW_BACKEND"
 _ENV_MODEL = "HEADROOM_WINNOW_MODEL"
@@ -184,9 +190,9 @@ class HighlighterBackend(_TransformersBackend):
 
     Args:
         model_id: Hugging Face repo id. Defaults to ``$HEADROOM_WINNOW_MODEL``
-            or :data:`DEFAULT_MODEL`.
+            or :data:`DEFAULT_HIGHLIGHTER_MODEL`.
         revision: Commit to load. Defaults to ``$HEADROOM_WINNOW_REVISION``, or
-            :data:`DEFAULT_REVISION` when the default model is used. A custom
+            :data:`DEFAULT_HIGHLIGHTER_REVISION` when the default model is used. A custom
             model without a revision loads ``main``.
         device: ``"cpu"``, ``"cuda"``, ... or ``"auto"`` (CUDA when available,
             else CPU). Defaults to ``$HEADROOM_WINNOW_DEVICE`` or ``"auto"``.
@@ -223,10 +229,10 @@ class HighlighterBackend(_TransformersBackend):
         doc_stride: int = 256,
         max_input_tokens: int | None = None,
     ) -> None:
-        model_id = model_id or os.environ.get(_ENV_MODEL) or DEFAULT_MODEL
+        model_id = model_id or os.environ.get(_ENV_MODEL) or DEFAULT_HIGHLIGHTER_MODEL
         if revision is None:
             revision = os.environ.get(_ENV_REVISION) or (
-                DEFAULT_REVISION if model_id == DEFAULT_MODEL else None
+                DEFAULT_HIGHLIGHTER_REVISION if model_id == DEFAULT_HIGHLIGHTER_MODEL else None
             )
         super().__init__(
             model_id, revision, device=device, dtype=dtype, max_input_tokens=max_input_tokens
@@ -277,16 +283,14 @@ class PooledBackend(_TransformersBackend):
     Args:
         model_id: Local directory or Hugging Face repo with the trained model
             (it ships ``modeling_squeez_pooled.py`` for ``trust_remote_code``).
-            Defaults to ``$HEADROOM_WINNOW_MODEL``.
+            Defaults to ``$HEADROOM_WINNOW_MODEL`` or :data:`DEFAULT_POOLED_MODEL`.
         revision: Commit to load for a hub repo. Defaults to
-            ``$HEADROOM_WINNOW_REVISION``.
+            ``$HEADROOM_WINNOW_REVISION``, or :data:`DEFAULT_POOLED_REVISION` when
+            the default model is used.
         device: As for :class:`HighlighterBackend`.
         dtype: As for :class:`HighlighterBackend`.
         threshold: Line probability at or above which a line is kept.
         max_input_tokens: As for :class:`HighlighterBackend`.
-
-    Raises:
-        ValueError: If no model is given and ``$HEADROOM_WINNOW_MODEL`` is unset.
     """
 
     # Scores the full Squeez test split (outputs up to ~22k tokens) at 0.92 s
@@ -304,12 +308,14 @@ class PooledBackend(_TransformersBackend):
         threshold: float = 0.5,
         max_input_tokens: int | None = None,
     ) -> None:
-        model_id = model_id or os.environ.get(_ENV_MODEL)
-        if not model_id:
-            raise ValueError(f"PooledBackend needs a model path or ${_ENV_MODEL}")
+        model_id = model_id or os.environ.get(_ENV_MODEL) or DEFAULT_POOLED_MODEL
+        if revision is None:
+            revision = os.environ.get(_ENV_REVISION) or (
+                DEFAULT_POOLED_REVISION if model_id == DEFAULT_POOLED_MODEL else None
+            )
         super().__init__(
             model_id,
-            revision or os.environ.get(_ENV_REVISION) or None,
+            revision,
             device=device,
             dtype=dtype,
             max_input_tokens=max_input_tokens,
@@ -364,13 +370,13 @@ def lines_to_spans(content: str, probs: list[float], threshold: float) -> list[t
 
 
 def make_backend() -> SpanBackend:
-    """Build the backend named by ``$HEADROOM_WINNOW_BACKEND`` (default ``highlighter``).
+    """Build the backend named by ``$HEADROOM_WINNOW_BACKEND`` (default ``pooled``).
 
     Constructing a backend loads nothing, so this is safe during discovery.
     """
-    name = (os.environ.get(_ENV_BACKEND) or "highlighter").strip().lower()
-    if name == "pooled":
-        return PooledBackend()
-    if name != "highlighter":
-        log.warning("unknown %s=%r; using highlighter", _ENV_BACKEND, name)
-    return HighlighterBackend()
+    name = (os.environ.get(_ENV_BACKEND) or "pooled").strip().lower()
+    if name == "highlighter":
+        return HighlighterBackend()
+    if name != "pooled":
+        log.warning("unknown %s=%r; using pooled", _ENV_BACKEND, name)
+    return PooledBackend()

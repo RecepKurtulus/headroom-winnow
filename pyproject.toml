@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "headroom-winnow"
-version = "0.1.0"
+version = "0.2.0"
 description = "Winnow: task-aware pruning of coding-agent tool output for Headroom, powered by Squeez models"
 readme = "README.md"
 license = "Apache-2.0"

@@ -133,10 +133,16 @@ inference error) falls back to Headroom's own path.
 ## Installation
 
 ```bash
-pip install "headroom-winnow[model] @ git+https://github.com/RecepKurtulus/headroom-winnow"
+pip install "headroom-winnow[model]"
 ```
 
 Installing changes nothing until you opt in:
+
+```bash
+headroom proxy --compressor winnow
+```
+
+or in Python:
 
 ```python
 from headroom.transforms.content_router import ContentRouter, ContentRouterConfig
@@ -144,36 +150,29 @@ from headroom.transforms.content_router import ContentRouter, ContentRouterConfi
 router = ContentRouter(ContentRouterConfig(active_external_compressors=["winnow"]))
 ```
 
-or start the proxy with `--compressor winnow`.
+On first use Winnow downloads its model,
+[`rbk4209/winnow-pooled-32m`](https://huggingface.co/rbk4209/winnow-pooled-32m)
+(128 MB), from the Hugging Face Hub at a pinned commit. A GPU is strongly
+recommended; on CPU Winnow only scores shorter outputs and leaves the rest to
+Headroom.
 
-### Choosing a model
+### Models
 
-| Backend | Model | Size | When to use |
-|---|---|---|---|
-| `pooled` (recommended) | 32M line classifier trained with [`training/`](https://github.com/RecepKurtulus/headroom-winnow/tree/main/training/) | 121 MB | Fast enough to score any output on a GPU |
-| `highlighter` (default) | [`KRLabsOrg/verbatim-rag-modern-bert-v2`](https://huggingface.co/KRLabsOrg/verbatim-rag-modern-bert-v2) | 600 MB | Works out of the box, downloaded from the Hub; limited to short outputs |
-
-To use the pooled model, download `squeez_pooled_ettin32m.zip` from the
-[latest release](https://github.com/RecepKurtulus/headroom-winnow/releases),
-unzip it, and point the plugin at it:
-
-```bash
-export HEADROOM_WINNOW_BACKEND=pooled
-export HEADROOM_WINNOW_MODEL=/path/to/squeez_pooled_ettin32m
-```
+| Backend | Model | When to use |
+|---|---|---|
+| `pooled` (default) | [`rbk4209/winnow-pooled-32m`](https://huggingface.co/rbk4209/winnow-pooled-32m), 32M line classifier trained for Winnow | Fast enough to score any tool output on a GPU |
+| `highlighter` | [`KRLabsOrg/verbatim-rag-modern-bert-v2`](https://huggingface.co/KRLabsOrg/verbatim-rag-modern-bert-v2), 150M span model | Squeez's original extractive model; slower, so limited to short outputs |
 
 ### Configuration
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `HEADROOM_WINNOW_BACKEND` | `highlighter` | `highlighter` or `pooled` |
-| `HEADROOM_WINNOW_MODEL` | `KRLabsOrg/verbatim-rag-modern-bert-v2` | Hub id or local path; required for `pooled` |
+| `HEADROOM_WINNOW_BACKEND` | `pooled` | `pooled` or `highlighter` |
+| `HEADROOM_WINNOW_MODEL` | the backend's published model | Hub id or local path |
 | `HEADROOM_WINNOW_REVISION` | pinned commit of the default model | Model revision |
 | `HEADROOM_WINNOW_DEVICE` | `auto` | `auto` (CUDA if available), `cuda` or `cpu` |
 | `HEADROOM_WINNOW_DTYPE` | `float32` | `float16` is faster only on GPUs with tensor cores |
 | `HEADROOM_WINNOW_MAX_TOKENS` | per backend and device | Largest output the model scores; larger ones go to Headroom |
-
-A GPU is strongly recommended. On CPU the plugin only scores short outputs.
 
 ## Results
 

@@ -5,8 +5,8 @@ the Headroom proxy and in your own code. Every variable is optional.
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `HEADROOM_WINNOW_BACKEND` | `highlighter` | `pooled` (recommended) or `highlighter` |
-| `HEADROOM_WINNOW_MODEL` | `KRLabsOrg/verbatim-rag-modern-bert-v2` | Hub id or local path. Required for `pooled` |
+| `HEADROOM_WINNOW_BACKEND` | `pooled` | `pooled` or `highlighter` |
+| `HEADROOM_WINNOW_MODEL` | the backend's published model | Hub id or local path |
 | `HEADROOM_WINNOW_REVISION` | pinned commit of the default model | Model revision to load |
 | `HEADROOM_WINNOW_DEVICE` | `auto` | `auto` (CUDA when available), `cuda` or `cpu` |
 | `HEADROOM_WINNOW_DTYPE` | `float32` | `float16` is faster only on GPUs with tensor cores |

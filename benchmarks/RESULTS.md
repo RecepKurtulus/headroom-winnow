@@ -54,8 +54,8 @@ these token reductions are an upper bound.
 # Headroom baselines + 150M highlighter
 python benchmarks/compare.py --device cuda
 
-# 32M pooled model (trained with training/kaggle_train_pooled.ipynb)
+# 32M pooled model (rbk4209/winnow-pooled-32m, trained with training/kaggle_train_pooled.ipynb)
 HEADROOM_WINNOW_MAX_TOKENS=1000000000 python benchmarks/compare.py --device cuda \
-    --backend pooled --model-path path/to/squeez_pooled_ettin32m \
+    --backend pooled --model-path rbk4209/winnow-pooled-32m \
     --methods squeez-raw,headroom-winnow
 ```
